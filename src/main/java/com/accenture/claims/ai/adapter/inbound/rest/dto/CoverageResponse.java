@@ -1,4 +1,4 @@
-package com.accenture.claims.ai.dto;
+package com.accenture.claims.ai.adapter.inbound.rest.dto;
 
 import lombok.Data;
 
