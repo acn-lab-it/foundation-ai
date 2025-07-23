@@ -1,15 +1,13 @@
-// SuperClaimAssistant.java -----------------------------------------------
-package com.accenture.claims.ai.agents;
+/*
+package com.accenture.claims.ai.application.agent;
 
-import com.accenture.claims.ai.tools.RestTools;
+import com.accenture.claims.ai.adapter.outbound.rest.RestService;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.SystemMessage;
 import io.quarkiverse.langchain4j.RegisterAiService;
 import io.quarkiverse.langchain4j.ToolBox;
-import jakarta.enterprise.context.ApplicationScoped;
 
 @RegisterAiService
-@ApplicationScoped
 @SystemMessage("""
     Sei l’assistente sinistri Allianz.
 
@@ -30,9 +28,11 @@ import jakarta.enterprise.context.ApplicationScoped;
     """)
 public interface SuperAgent {
 
-    /** @param userInput  testo dell’utente
+    */
+/** @param userInput  testo dell’utente
      *  @param visionJson JSON generato dall’OCR (stringa vuota se assente)
-     */
+     *//*
+
     @UserMessage("""
         {#if visionJson}
         VisionAnalysis:
@@ -42,6 +42,7 @@ public interface SuperAgent {
         {/if}
         Utente: {userInput}
         """)
-    @ToolBox(RestTools.class)
+    @ToolBox(RestService.class)
     String chat(String userInput, String visionJson);
 }
+*/

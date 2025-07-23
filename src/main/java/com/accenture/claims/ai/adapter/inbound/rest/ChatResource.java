@@ -1,9 +1,11 @@
+/*
 package com.accenture.claims.ai.api;
 
-import com.accenture.claims.ai.dto.ChatForm;
-import com.accenture.claims.ai.dto.ImageSource;
-import com.accenture.claims.ai.agents.MediaOcrAgent;
-import com.accenture.claims.ai.agents.SuperAgent;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.ImageSource;
+import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
+import com.accenture.claims.ai.application.agent.MediaOcrAgent;
+import com.accenture.claims.ai.application.agent.SuperAgent;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -21,14 +23,21 @@ import java.util.stream.Collectors;
 @Produces(MediaType.APPLICATION_JSON)
 public class ChatResource {
 
-    @Inject MediaOcrAgent ocr;
-    @Inject SuperAgent    assistant;
+    private final MediaOcrAgent ocr;
+    private final SuperAgent assistant;
+
+    public ChatResource(MediaOcrAgent ocr, SuperAgent assistant) {
+        this.ocr = ocr;
+        this.assistant = assistant;
+    }
+
 
     @POST
     public Response chat(@BeanParam ChatForm form) {
 
         try {
-            /* Saalva gli eventuali allegati su /tmp e prendi i Path */
+ //Saalva gli eventuali allegati su /tmp e prendi i Path
+
             List<Path> paths = new ArrayList<>();
             if (form.files != null && !form.files.isEmpty()) {
                 Path tmpDir = Files.createTempDirectory("chat-");
@@ -39,7 +48,8 @@ public class ChatResource {
                 }
             }
 
-            /* Esegui OCR solo se sono stati caricati media */
+ //Esegui OCR solo se sono stati caricati media
+
             String visionJson = "";
             if (!paths.isEmpty()) {
                 List<ImageSource> src = paths.stream()
@@ -48,11 +58,15 @@ public class ChatResource {
                 visionJson = ocr.runOcr(src, form.userMessage == null ? "" : form.userMessage);
             }
 
-            /* Riprendi flusso LLM */
+ //Riprendi flusso LLM
+
             String userMsg = form.userMessage == null ? "" : form.userMessage;
+
+
             String answer  = assistant.chat(userMsg, visionJson);
 
-            /* Ritorna la risposta */
+ //Ritorna la risposta
+
             return Response.ok(answer).build();
 
         } catch (Exception e) {
@@ -63,3 +77,4 @@ public class ChatResource {
         }
     }
 }
+*/

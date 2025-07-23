@@ -1,4 +1,4 @@
-package com.accenture.claims.ai.dto;
+package com.accenture.claims.ai.adapter.inbound.rest.dto;
 
 /** Holder per il data‑URI dell’immagine. */
 public class ImageSource {

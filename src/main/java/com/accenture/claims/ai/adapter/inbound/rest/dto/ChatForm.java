@@ -1,4 +1,4 @@
-package com.accenture.claims.ai.dto;
+package com.accenture.claims.ai.adapter.inbound.rest.dto;
 import jakarta.ws.rs.FormParam;
 import org.jboss.resteasy.reactive.PartType;
 import org.jboss.resteasy.reactive.multipart.FileUpload;

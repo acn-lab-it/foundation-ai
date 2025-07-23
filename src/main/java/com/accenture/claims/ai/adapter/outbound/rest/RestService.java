@@ -1,9 +1,8 @@
 // RestTools.java ----------------------------------------------------------
-package com.accenture.claims.ai.tools;
+package com.accenture.claims.ai.adapter.outbound.rest;
 
 import dev.langchain4j.agent.tool.Tool;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.rest.client.RestClientBuilder;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
@@ -11,7 +10,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpClient;
 
 @ApplicationScoped
-public class RestTools {
+public class RestService {
 
     @Tool(name = "rest_api",
             value = """

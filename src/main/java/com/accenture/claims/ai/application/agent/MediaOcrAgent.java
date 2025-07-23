@@ -1,13 +1,15 @@
-package com.accenture.claims.ai.agents;
+package com.accenture.claims.ai.application.agent;
 
-import com.accenture.claims.ai.dto.ImageSource;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.ImageSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.image.Image;
-import dev.langchain4j.data.message.*;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
-
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.IOException;
