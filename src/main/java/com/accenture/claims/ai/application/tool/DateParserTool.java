@@ -1,88 +1,58 @@
 package com.accenture.claims.ai.application.tool;
 
-import com.joestelmach.natty.DateGroup;
-import com.joestelmach.natty.Parser;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class DateParserTool {
 
-    public static class IncidentDate {
-        public int year;
-        public int month;
-        public int day;
-    }
+    @Inject ChatModel chatModel;
 
-    // Try ISO-8601 first
-    private static Date tryIso(String input) {
-        try {
-            Instant instant = Instant.parse(input);
-            return Date.from(instant);
-        } catch (DateTimeParseException e) {
-            return null;
+    @Tool("Normalize any natural-language date/time expression into ISO-8601 string (YYYY-MM-DDThh:mm:ssZ).")
+    public String normalize(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("Empty date/time input");
         }
-    }
 
-    // Some common custom date formats
-    private static final DateTimeFormatter[] CUSTOM_FORMATTERS = new DateTimeFormatter[]{
-            DateTimeFormatter.ofPattern("dd-MM-yyyy"),
-            DateTimeFormatter.ofPattern("d-M-yyyy"),
-            DateTimeFormatter.ofPattern("dd/MM/yyyy"),
-            DateTimeFormatter.ofPattern("d MM yyyy"),
-            DateTimeFormatter.ofPattern("MM d, yyyy"),
-            DateTimeFormatter.ofPattern("d MM, yyyy")
-    };
+        ZonedDateTime now = ZonedDateTime.now();
+        String prompt = """
+                You are a date-time normalization assistant.
+                Current reference: %s.
+                Convert the user's date/time expression into a single ISO-8601 timestamp with time *and* UTC 'Z' suffix.
 
-    private static Date tryCustomPatterns(String input) {
-        for (DateTimeFormatter fmt : CUSTOM_FORMATTERS) {
-            try {
-                LocalDate ld = LocalDate.parse(input, fmt);
-                return Date.from(ld.atStartOfDay(ZoneId.systemDefault()).toInstant());
-            } catch (DateTimeParseException ignored) { }
+                Rules:
+                - Italian or English input.
+                - Resolve relative expressions (e.g. "ieri", "next monday") from the reference.
+                - If time is missing, use 00:00:00.
+                - Output ONLY one line: YYYY-MM-DDThh:mm:ssZ
+                User input: %s
+                """.formatted(now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), raw);
+
+        var answer = chatModel.chat(List.of(
+                SystemMessage.from("You convert arbitrary date/time strings to ISO-8601."),
+                UserMessage.from(prompt)
+        )).aiMessage().text().trim();
+
+        // Regex: 2025-07-14 | T | 22:00:00 | Z
+        Pattern p = Pattern.compile("(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})Z?");
+        Matcher m = p.matcher(answer);
+        if (!m.find()) {
+            throw new IllegalArgumentException("LLM did not return ISO-8601: '" + answer + "'");
         }
-        return null;
-    }
-
-    // NLP fallback using Natty
-    private static Date tryNatty(String input) {
-        Parser parser = new Parser();
-        List<DateGroup> groups = parser.parse(input);
-        if (!groups.isEmpty() && !groups.get(0).getDates().isEmpty()) {
-            return groups.get(0).getDates().get(0);
-        }
-        return null;
-    }
-
-    @Tool("tryDefaultParse tool used to parse the incident date provided by the user to a java.util.Date")
-    public Date tryDefaultParse(IncidentDate incidentDate) {
-        return Date.from(Instant.from(LocalDate.of(incidentDate.year, incidentDate.month, incidentDate.day)));
-    }
-
-    /**
-     * Parses a user‐provided date string into java.util.Date.
-     * @param input any of: ISO‐8601, dd-MM-yyyy, “July 14, 2025”, “yesterday”, etc.
-     * @return the corresponding Date
-     * @throws IllegalArgumentException if no parse strategy succeeds
-     */
-    @Tool("Convert date to java.util.Date if not possible through the tryDefaultParse tool")
-    public Date parse(String input) {
-        if (input == null || input.isBlank()) {
-            throw new IllegalArgumentException("Date string is empty");
-        }
-        Date d;
-        if ((d = tryIso(input)) != null) return d;
-        if ((d = tryCustomPatterns(input)) != null) return d;
-        if ((d = tryNatty(input)) != null) return d;
-        throw new IllegalArgumentException("Unparseable date: '" + input + "'");
+        String core = m.group(1);
+        return core + "Z";
     }
 }
-

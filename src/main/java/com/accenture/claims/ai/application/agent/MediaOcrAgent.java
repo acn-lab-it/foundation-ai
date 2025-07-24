@@ -2,6 +2,7 @@ package com.accenture.claims.ai.application.agent;
 
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ImageSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
@@ -27,6 +28,19 @@ public class MediaOcrAgent {
 
     public MediaOcrAgent(ChatModel visionModel) {
         this.visionModel = visionModel;
+    }
+
+    /**
+     * Tool LLM: effettua OCR / classificazione danni su immagini o video.
+     * @param filePaths elenco di path assoluti sul filesystem server.
+     * @return JSON con damageCategory / damagedEntity / confidence
+     */
+    @Tool("Analyze uploaded media (images or videos) and return a JSON with damageCategory, damagedEntity, confidence.")
+    public String analyzeMedia(List<String> filePaths) throws IOException, InterruptedException {
+        List<ImageSource> src = filePaths.stream()
+                .map(p -> new ImageSource(p))
+                .collect(Collectors.toList());
+        return runOcr(src, "");
     }
 
     /* API usata dal SuperAgent */

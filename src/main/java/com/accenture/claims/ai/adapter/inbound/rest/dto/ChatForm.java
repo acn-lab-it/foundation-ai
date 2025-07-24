@@ -10,6 +10,9 @@ public class ChatForm {
     @FormParam("userMessage")
     public String userMessage;
 
+    @FormParam("sessionId")
+    public String sessionId;
+
     /** 0‑n file di qualunque tipo (immagini, video, pdf…). */
     @FormParam("files")
     @PartType("application/octet-stream")
