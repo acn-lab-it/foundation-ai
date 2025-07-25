@@ -66,7 +66,6 @@ public class MediaOcrAgent {
         return runOcr(sessionId, src, userText == null ? "" : userText);
     }
 
-    /* API usata dal SuperAgent */
     public String runOcr(String sessionId, List<ImageSource> sources, String userText) throws IOException, InterruptedException {
         List<Image> images = new ArrayList<>();
         int budgetLeft = MAX_TOTAL_IMAGES;
@@ -108,9 +107,9 @@ public class MediaOcrAgent {
     private List<ChatMessage> buildPrompt(String sessionId, List<Image> imgs, String userText) {
         List<ChatMessage> list = new ArrayList<>();
         String lang = sessionLanguageContext.getLanguage(sessionId);
-        String basePrompt = LanguageHelper.getPrompt(lang, "mediaOcr.mainPrompt");
+        LanguageHelper.PromptResult PromptResult = LanguageHelper.getPromptWithLanguage(lang, "mediaOcr.mainPrompt");
         String now = new Date().toString();
-        String finalSystem = basePrompt.replace("{{today}}", now);
+        String finalSystem = PromptResult.prompt.replace("{{today}}", now);
 
         list.add(SystemMessage.from(finalSystem));
         if (userText != null && !userText.isBlank()) {

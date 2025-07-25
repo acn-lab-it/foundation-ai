@@ -3,15 +3,10 @@ package com.accenture.claims.ai.adapter.inbound.rest;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.ReplaceOptions;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.bson.Document;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import java.io.IOException;
@@ -77,14 +72,16 @@ public class FnolResource {
             }
         }
 
-        // Imposto la lingua per la sessione
-        String lang = LanguageHelper.resolveBestLanguage(acceptLanguage);
-        sessionLanguageContext.setLanguage(sessionId, lang);
+        // Recupero la lingua e il main prompt del superagent (fallback su "en" se non gestiamo la lingua richiesta)
+        LanguageHelper.PromptResult promptResult = LanguageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.mainPrompt");
 
-        // Prendo il prompt per la lingua richiesta
-        String systemMessage = LanguageHelper.getPrompt(acceptLanguage, "superAgent.mainPrompt");
+        // Inietto la sessionId corrente nel prompt per renderlo aware del vero sessionID (scopo: evitare confusioni nelle chiamate interne)
+        String systemPrompt = promptResult.prompt.replace("{{sessionId}}", sessionId);
 
-        String answer = agent.chat(sessionId, systemMessage, userMessage);
+        // Imposto la lingua di sessione per i sotto-prompt e pro-futuro
+        sessionLanguageContext.setLanguage(sessionId, promptResult.language);
+
+        String answer = agent.chat(sessionId, systemPrompt, userMessage);
         return Response.ok(new ChatResponseDto(sessionId, answer)).build();
     }
 }
