@@ -3,6 +3,7 @@ package com.accenture.claims.ai.adapter.inbound.rest;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -30,9 +31,12 @@ public class FnolResource {
     public static class ChatResponseDto {
         public String sessionId;
         public String answer;
-        public ChatResponseDto(String sessionId, String answer) {
+        public Object finalResult; // null se non è stato creato
+
+        public ChatResponseDto(String sessionId, String answer, Object finalResult) {
             this.sessionId = sessionId;
             this.answer = answer;
+            this.finalResult = finalResult;
         }
     }
 
@@ -81,7 +85,22 @@ public class FnolResource {
         // Imposto la lingua di sessione per i sotto-prompt e pro-futuro
         sessionLanguageContext.setLanguage(sessionId, promptResult.language);
 
-        String answer = agent.chat(sessionId, systemPrompt, userMessage);
-        return Response.ok(new ChatResponseDto(sessionId, answer)).build();
+        String raw = agent.chat(sessionId, systemPrompt, userMessage);
+
+        ChatResponseDto dto;
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            var node = mapper.readTree(raw);
+            String answer = node.has("answer") ? node.get("answer").asText() : raw;
+            Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
+                    ? mapper.convertValue(node.get("finalResult"), Object.class)
+                    : null;
+            dto = new ChatResponseDto(sessionId, answer, finalResult);
+        } catch (Exception ex) {
+            // Se il modello non segue lo schema, fallback
+            dto = new ChatResponseDto(sessionId, raw, null);
+        }
+
+        return Response.ok(dto).build();
     }
 }
