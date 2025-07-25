@@ -24,4 +24,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: francescomariapicchioni/az-assistant:latest
+          tags: francescomariapicchioni/superagent-server:latest
