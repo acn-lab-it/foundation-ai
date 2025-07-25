@@ -1,6 +1,8 @@
 package com.accenture.claims.ai.application.agent;
 
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ImageSource;
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.data.image.Image;
@@ -12,6 +14,7 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -23,8 +26,26 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class MediaOcrAgent {
 
+    @Inject
+    SessionLanguageContext sessionLanguageContext;
+
     private final ChatModel visionModel;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    private static final String DEFAULT_JSON_FALLBACK = """
+    {
+      "damageCategory": "NONE",
+      "damagedEntity": "NONE",
+      "eventType": "NONE",
+      "propertyCode": "NONE",
+      "claimDate": "NONE",
+      "claimHour": "NONE",
+      "claimProofDate": "NONE",
+      "claimReceivedDate": "NONE",
+      "ready": false,
+      "confidence": 0
+    }
+    """;
 
     public MediaOcrAgent(ChatModel visionModel) {
         this.visionModel = visionModel;
@@ -32,145 +53,71 @@ public class MediaOcrAgent {
 
     /**
      * Tool LLM: effettua OCR / classificazione danni su immagini o video.
+     * @param sessionId id della sessione corrente
      * @param filePaths elenco di path assoluti sul filesystem server.
+     * @param userText testo inputato dall'utente
      * @return JSON con damageCategory / damagedEntity / confidence
      */
-    @Tool("Analyze uploaded media (images or videos) and return a JSON with damageCategory, damagedEntity, confidence.")
-    public String analyzeMedia(List<String> filePaths) throws IOException, InterruptedException {
+    @Tool("Analyze uploaded media (images or videos). Parameters: sessionId, filePaths[], userText. Return JSON with damageCategory, damagedEntity, confidence, dates, etc.")
+    public String analyzeMedia(String sessionId, List<String> filePaths, String userText) throws IOException, InterruptedException {
         List<ImageSource> src = filePaths.stream()
-                .map(p -> new ImageSource(p))
+                .map(ImageSource::new)
                 .collect(Collectors.toList());
-        return runOcr(src, "");
+        return runOcr(sessionId, src, userText == null ? "" : userText);
     }
 
     /* API usata dal SuperAgent */
-    public String runOcr(List<ImageSource> sources, String userText) throws IOException, InterruptedException {
+    public String runOcr(String sessionId, List<ImageSource> sources, String userText) throws IOException, InterruptedException {
         List<Image> images = new ArrayList<>();
         int budgetLeft = MAX_TOTAL_IMAGES;
-
         for (ImageSource s : sources) {
             Path path = Path.of(s.getRef());
-
             if (budgetLeft == 0) break;
-
-            if (isVideo(path)) {                         // VIDEO
+            if (isVideo(path)) {
                 List<Image> frames = extractFrames(path, budgetLeft);
                 images.addAll(frames);
                 budgetLeft -= frames.size();
-            } else {                                     // IMMAGINE
+            } else {
                 try {
                     byte[] bytes = Files.readAllBytes(path);
                     String b64 = Base64.getEncoder().encodeToString(bytes);
-                    images.add(Image.builder()
-                            .url("data:image/jpeg;base64," + b64)
-                            .build());
+                    images.add(Image.builder().url("data:image/jpeg;base64," + b64).build());
                     budgetLeft--;
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }
-
-        String visionJson = analyze(images, userText);
-        System.out.println(visionJson);
-        return visionJson;
+        return analyze(sessionId, images, userText);
     }
 
     /* Analisi di foto + input utente */
-    private String analyze(List<Image> images, String userText) {
-
-        List<ChatMessage> prompt = buildPrompt(images, userText);
-
+    private String analyze(String sessionId, List<Image> images, String userText) {
+        List<ChatMessage> prompt = buildPrompt(sessionId, images, userText);
         ChatResponse resp = visionModel.chat(ChatRequest.builder()
                 .messages(prompt)
                 .temperature(0.0)
                 .maxOutputTokens(1_024)
                 .build());
-
-        String raw  = resp.aiMessage().text();
-        System.out.println("============= \n" + raw + "\n=============");
-
-        return extractJsonBlock(raw).orElse(
-                """
-                {
-                  "damageCategory":"NONE","damagedEntity":"NONE",
-                  "eventType":"NONE","propertyCode":"NONE",
-                  "claimDate":"NONE","claimHour":"NONE",
-                  "claimProofDate":"NONE","claimReceivedDate":"NONE",
-                  "ready":false,"confidence":0
-                }""");
+        String raw = resp.aiMessage().text();
+        return extractJsonBlock(raw).orElse(DEFAULT_JSON_FALLBACK);
     }
 
+
     /* Il prompt "main" per l'analisi*/
-    private List<ChatMessage> buildPrompt(List<Image> imgs, String userText) {
-
+    private List<ChatMessage> buildPrompt(String sessionId, List<Image> imgs, String userText) {
         List<ChatMessage> list = new ArrayList<>();
-
+        String lang = sessionLanguageContext.getLanguage(sessionId);
+        String basePrompt = LanguageHelper.getPrompt(lang, "mediaOcr.mainPrompt");
         String now = new Date().toString();
-        list.add(SystemMessage.from(
-                """
-                Analizza tutte le immagini seguenti.
-                
-                Questi sono i tipi di eventi che devi identificare. Scegli il piu appropriato sulla base della tua analisi.
-                - Incendio o altri eventi
-                - Bagnatura e Spese di Ricerca e Riparazione del guasto per rottura di tubi di acqua e gas
-                - Eventi Atmosferici
-                - Fenomeno Elettrico
-                - Eventi socio-politici, terrorismo, atti vandalici
-                - Danni accidentali ai Vetri
-                - Eccedenza consumo d’acqua
-                - Catastrofe naturale
-                - Spese Veterinarie
-                - Furto e guasti causati da ladri
-                
-                 Qui hai una lista di codici, sulla base della macrocategoria che individui devi tornare il codice:
-                | Property                       | Code  |
-                | ------------------------------ | ------|
-                | Building                       | RNMBS |
-                | Contents                       | RNMCS |
-                | Theft and Robbery              | RNMRS |
-                | Home Civil Liability           | RNMOS |
-                | Legal Protection               | RNMLS |
-                
-                Usa le informazioni passate dall'utente anche per definire:
-                - claimDate: giorno in cui è avvenuto il sinistro (e.g. '2025-07-17'),
-                - claimHour: ora in cui è avvenuto il sinistro (e.g. '08:00'),
-                - claimProofDate: ora in cui è stata data prova del sinistro (e.g. '2025-07-18'),
-                - claimReceivedDate: ora in cui è stato ricevuto dall'assicurazione il sinistro (e.g. '2025-07-18'),
-                Sapendo che oggi è """+now+"""
-                
-                Se queste informazioni non sono fornite, non desumerle da solo ma chiedile. Sappi che claimDate e claimHour,
-                nel caso non siano espresse esattamente come tali potrebbero essere contestualizzate in frasi tipo "ieri alle 20" o "due giorni fa".
-                Potrebbe non essere detta in modo diretta ma deducibile.
-                
-                claimProofDate e claimReceivedData non sono dati mandatori, per cui se non li hai ma hai **TUTTO** il resto, puoi dedurre
-                di avere tutte le informazioni che ti servono.
-                
-                Se hai tutte le informazioni, imposta il campo "ready" a true, altrimenti false
-                
-                Rispondi con **solo** il JSON:
-                {
-                  "damageCategory": "VEHICLE | PROPERTY | NONE",
-                  "damagedEntity":  "<breve nome o NONE>",
-                  "eventType": "<type of detected damage source (e.g. Incendio o altri eventi, Eventi Atmosferici)>",
-                  "propertyCode": "<RNMBS | RNMCS | RNMRS | RNMOS | RNMLS>"
-                  "claimDate": "<date o NONE>",
-                  "claimHour": "<time o NONE>",
-                  "claimProofDate": "<date o NONE>",
-                  "claimReceivedDate": "<date o NONE>",
-                  "ready": true | false,
-                  "confidence": "<decimale 0‑1>"
-                }
-                Nient’altro.
-                """));
+        String finalSystem = basePrompt.replace("{{today}}", now);
 
+        list.add(SystemMessage.from(finalSystem));
         if (userText != null && !userText.isBlank()) {
             list.add(UserMessage.from(userText));
         }
-
         for (Image img : imgs) {
-            ImageContent content = ImageContent.from(img.url());
-            list.add(new UserMessage(content));
+            list.add(new UserMessage(ImageContent.from(img.url())));
         }
         return list;
     }

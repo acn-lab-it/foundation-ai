@@ -1,5 +1,6 @@
 package com.accenture.claims.ai.adapter.inbound.rest;
 
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.mongodb.client.MongoClient;
@@ -19,6 +20,8 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
+
 @jakarta.ws.rs.Path("/fnol")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
@@ -26,6 +29,8 @@ public class FnolResource {
 
     @Inject
     FNOLAssistantAgent agent;
+    @Inject
+    SessionLanguageContext sessionLanguageContext;
 
     public static class ChatResponseDto {
         public String sessionId;
@@ -38,7 +43,7 @@ public class FnolResource {
 
     @POST
     @jakarta.ws.rs.Path("/chat")
-    public Response chat(@BeanParam ChatForm form) {
+    public Response chat(@BeanParam ChatForm form, @HeaderParam("Accept-Language") String acceptLanguage) {
 
         if (form == null || form.userMessage == null) {
             return Response.status(Response.Status.BAD_REQUEST)
@@ -72,7 +77,14 @@ public class FnolResource {
             }
         }
 
-        String answer = agent.chat(sessionId, userMessage);
+        // Imposto la lingua per la sessione
+        String lang = LanguageHelper.resolveBestLanguage(acceptLanguage);
+        sessionLanguageContext.setLanguage(sessionId, lang);
+
+        // Prendo il prompt per la lingua richiesta
+        String systemMessage = LanguageHelper.getPrompt(acceptLanguage, "superAgent.mainPrompt");
+
+        String answer = agent.chat(sessionId, systemMessage, userMessage);
         return Response.ok(new ChatResponseDto(sessionId, answer)).build();
     }
 }
