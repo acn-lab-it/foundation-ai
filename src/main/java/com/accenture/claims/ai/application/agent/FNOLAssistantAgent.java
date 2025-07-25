@@ -1,5 +1,6 @@
 package com.accenture.claims.ai.application.agent;
 
+import com.accenture.claims.ai.application.tool.SummaryTool;
 import com.accenture.claims.ai.domain.repository.PolicyRepository;
 import com.accenture.claims.ai.application.tool.AdministrativeCheckTool;
 import com.accenture.claims.ai.application.tool.DateParserTool;
@@ -162,7 +163,7 @@ import jakarta.enterprise.context.ApplicationScoped;
             - Script di Esempio: "Buongiorno, sono FNOL Genius, il suo assistente virtuale Allianz per la denuncia di sinistri. Per iniziare, potrebbe per favore fornirmi il suo nome, cognome e il numero della sua polizza assicurativa?"
         
         STEP 1: Raccolta Dati Anagrafici e Polizza
-            - Azione: Raccogli i dati ricevuti dalo step 0 e completali con le informazioni mancanti chiedendo all'utente le informazioni che non ha eventualmente fornito.
+            - Azione: Raccogli i dati ricevuti dallo step 0 e completali con le informazioni mancanti chiedendo all'utente le informazioni che non ha eventualmente fornito.
             - Validazione:
                  Se viene fornita una polizza devi verificare:
                  1 - Se esiste, verificalo subito anche senza avere tutti i dettagli dell'utente
@@ -197,7 +198,6 @@ import jakarta.enterprise.context.ApplicationScoped;
                 - Se il messaggio dell'utente contiene una sezione [MEDIA_FILES] ... [/MEDIA_FILES] con uno o più path di file, usa lo strumento `MediaOcrAgent.runOcr` passando un array di oggetti { "ref": "<percorso>" } come parametro `sources` e il testo dell'utente come `userPrompt`. Integra con le informazioni che riesci a desumere dal contesto.
                 - Prima di proseguire con gli step successivi, torna un recap all'utente aggiungendo le informazioni che sei riuscito a capire dai media allegati.
         
-            
         STEP 4. VERIFICA REGOLARITA AMMINISTRATIVA (CONDIZIONALE)
             - Prerequisito: Attiva il seguente step solo e soltanto se hai completato con successo tutti e tre gli step precedenti e hai raccolto ogni singola informazione richiesta. Non devi assolutamente chiamare questo step se anche un solo dato è mancante.
             - Trigger: Tutte le informazioni degli STEP 1, 2 e 3 sono state raccolte.
@@ -206,13 +206,10 @@ import jakarta.enterprise.context.ApplicationScoped;
             - Validazione: Se hai una data, un indirizzo e un'ora valida, procedi, altrimenti continua a chiedere finchè non riesci a costruire le ultime informazioni e chiedi conferma all'utente che sia corretta.
             - Obiettivo per lo step: "Step regolarità amministrativa, esegui un controllo preliminare sulla polizza [numero polizza] per verificare se la data dell'incidente è compresa tra data di attivazione e fine della polizza. Restituisci 'true', 'false'."
         
-        STEP 5. ARRICCHIMENTO DELLE INFORMAZIONI PER PREPARAZIONE OUTPUT FINALE
-            - Prerequisito: Avendo eseguito e completato lo step 4, puoi passare a questo step.
-        
-        STEP 6. JSON DI OUTPUT IMMEDIATO
+        STEP 5. JSON DI OUTPUT IMMEDIATO
             - Trigger: Hai ricevuto l'esito dello STEP 4
             - Script di Esempio: "Perfetto, ho raccolto tutte le informazioni necessarie e la sua richiesta è comprensiva dei dati presenti nel json. A breve riceverà un'email di conferma con il numero della sua pratica. Verrà contattato al più presto da un nostro specialista. Grazie per aver utilizzato il nostro servizio."
-            - Input da fornire allo step: Fornisci l'intero pacchetto di informazioni raccolte:
+            - Input necessari allo step:
                 - Dati anagrafici completi e numero di polizza.
                 - Una descrizione dettagliata della dinamica del sinistro (inclusi data, ora e luogo esatto).
                 - Danni dichiarati (non considerare le immagini o documenti come degli input obbligatori)
@@ -240,6 +237,12 @@ import jakarta.enterprise.context.ApplicationScoped;
                   "damageDetails": "Oven has been damaged",
                   "imagesUploaded": "No images available"
                 }
+            - Validazione: 
+                - Devi chiamare il tool emitSummary passando tutti i valori raccolti. 
+                - La risposta finale al cliente deve essere esattamente il JSON restituito dal tool, senza alcun testo prima o dopo. Non aggiungere commenti o spiegazioni
+                - NON rispondere con testo normale. 
+                - NON racchiudere il JSON in backticks.
+                - Dopo aver usato il tool termina la conversazione.
         """)
 public interface FNOLAssistantAgent {
 
@@ -249,7 +252,8 @@ public interface FNOLAssistantAgent {
         AdministrativeCheckTool.class,
         DateParserTool.class,
         WhatHappenedRepository.class,
-        MediaOcrAgent.class
+        MediaOcrAgent.class,
+        SummaryTool.class
     })
     String chat( @MemoryId String sessionId, @UserMessage String userMessage);
 

@@ -17,4 +17,11 @@ public class ChatForm {
     @FormParam("files")
     @PartType("application/octet-stream")
     public List<FileUpload> files;
+
+    /**
+     * Messaggio audio dell'utente
+     * In mutua esclusione con userMessage (?)
+     */
+    @FormParam("userAudioMessage")
+    public FileUpload userAudioMessage;
 }
