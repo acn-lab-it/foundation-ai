@@ -3,12 +3,14 @@ package com.accenture.claims.ai.adapter.outbound.rest;
 
 import dev.langchain4j.agent.tool.Tool;
 import jakarta.enterprise.context.ApplicationScoped;
+import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpClient;
 
+@Slf4j
 @ApplicationScoped
 public class RestService {
 
@@ -54,6 +56,7 @@ public class RestService {
                { "status": %d, "body": %s }
                """.formatted(resp.statusCode(), escape(resp.body()));
         } catch (Exception e) {
+            log.error("Errore durante la chiamata HTTP al servizio REST: " + e.getMessage(), e);
             // fai arrivare comunque un JSON all’LLM, così possiamo fare una fallback? da capire con gestione errori
             return """
                { "status": 500, "error": "%s" }

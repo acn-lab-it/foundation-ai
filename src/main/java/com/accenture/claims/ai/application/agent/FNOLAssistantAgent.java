@@ -24,6 +24,7 @@ public interface FNOLAssistantAgent {
         DateParserTool.class,
         WhatHappenedRepository.class,
         MediaOcrAgent.class,
+        SpeechToTextAgent.class,
         SummaryTool.class
     })
     /*
