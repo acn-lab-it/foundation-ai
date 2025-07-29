@@ -28,7 +28,7 @@ public class NonEmptyOutputGuard implements OutputGuardrail {
                 - Se lo step richiede l'uso di tool, ESEGUI i tool necessari ORA e restituisci
                   il risultato nella stessa risposta (niente messaggi di attesa).
                 """;
-            return reprompt("Niente messaggi o nulli. Usa i tool o poni una domanda mirata.", nudge);
+            return reprompt("Niente messaggi vuoti o nulli. Usa i tool o poni una domanda mirata.", nudge);
         }
 
         return success();
