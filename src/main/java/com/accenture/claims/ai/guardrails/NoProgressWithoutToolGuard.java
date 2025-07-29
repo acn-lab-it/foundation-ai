@@ -15,7 +15,7 @@ public class NoProgressWithoutToolGuard implements OutputGuardrail {
     // @TODO - DEVO FARLO MULTILINGUA DINAMICO
     // @TODO - Gestire il fatto che ogni tanto torna null
     private static final Pattern PROGRESS = Pattern.compile(
-            "\\b(un momento|verifico|verificando|procedo|controllando|un attimo|attendere|sto|in corso|verificher[òo]|controllo|a moment|please wait|waiting|checking|processing)\\b",
+            "\\b(un momento|Proceder[oò] ora a|verifico|verificando|procedo|controllando|un attimo|attendere|sto|in corso|verificher[òo]|controllo|a moment|please wait|waiting|checking|processing)\\b",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 

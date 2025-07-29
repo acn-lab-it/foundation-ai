@@ -29,6 +29,7 @@ public interface FNOLAssistantAgent {
             AdministrativeCheckTool.class,
             DateParserTool.class,
             MediaOcrAgent.class,
+            SpeechToTextAgent.class,
             SummaryTool.class,
             PolicyFinderTool.class,
             TechnicalCoverageTool.class,

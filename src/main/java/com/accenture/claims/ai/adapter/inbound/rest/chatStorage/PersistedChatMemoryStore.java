@@ -91,7 +91,7 @@ public class PersistedChatMemoryStore implements ChatMemoryStore {
 
     @Override
     public void deleteMessages(Object memoryId) {
-        System.out.println("DELETING");
+        //System.out.println("DELETING");
         coll().deleteOne(Filters.eq("_id", memoryId.toString()));
     }
 

@@ -80,6 +80,23 @@ public class FnolResource {
             }
         }
 
+        // Gestione messaggio vocale
+        if (form.userAudioMessage != null) {
+            try {
+                Path tmpDir = Files.createTempDirectory("chat-audio-");
+                Path dst = tmpDir.resolve(form.userAudioMessage.fileName());
+                Files.copy(form.userAudioMessage.uploadedFile(), dst);
+
+                // Se c'è un messaggio vocale, ignora il messaggio testuale dell'utente
+                // e usa solo il messaggio vocale
+                userMessage += "[AUDIO_MESSAGE]\n" + dst.toString() + "\n[/AUDIO_MESSAGE]";
+            } catch (IOException e) {
+                return Response.serverError()
+                        .entity("{\"error\":\"audio_upload_failure\"}")
+                        .build();
+            }
+        }
+
         // Recupero la lingua e il main prompt del superagent (fallback su "en" se non gestiamo la lingua richiesta)
         LanguageHelper.PromptResult promptResult =
                 languageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.mainPrompt");
@@ -96,9 +113,9 @@ public class FnolResource {
 
         String raw = agent.chat(sessionId, systemPrompt, userMessage);
 
-        System.out.println("====================================================");
+        System.out.println("=================== Agent Response =======================");
         System.out.println("RAW: " + raw);
-        System.out.println("====================================================");
+        System.out.println("==========================================================\n");
         if (raw == null || raw.trim().isEmpty() || "null".equalsIgnoreCase(raw.trim())) {
             // fallback lato server giusto per non restituire mai un body vuoto al client
             raw = """
