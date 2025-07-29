@@ -1,19 +1,30 @@
 package com.accenture.claims.ai.adapter.inbound.rest.helpers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.Filters;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.bson.Document;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+@ApplicationScoped
 public class LanguageHelper {
 
     private static final String FALLBACK_LANG = "en";
-    private static final String RESOURCE_PREFIX = "/prompts/fnol-prompts-";
-    private static final String RESOURCE_SUFFIX = ".json";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String COLLECTION_NAME = "prompts";
 
-    private static final Map<String, Map<String, Object>> PROMPT_CACHE = new ConcurrentHashMap<>();
+    @Inject
+    MongoClient mongo;
+
+    @ConfigProperty(name = "quarkus.mongodb.database", defaultValue = "local_db")
+    String dbName;
+
+    // Cache per lingua -> mappa del documento (senza _id)
+    private final Map<String, Map<String, Object>> cache = new ConcurrentHashMap<>();
 
     public static class PromptResult {
         public final String language;
@@ -24,34 +35,76 @@ public class LanguageHelper {
         }
     }
 
-    public static PromptResult getPromptWithLanguage(String acceptLanguageHeader, String keyPath) {
+    private MongoCollection<Document> collection() {
+        return mongo.getDatabase(dbName).getCollection(COLLECTION_NAME);
+    }
+
+    public PromptResult getPromptWithLanguage(String acceptLanguageHeader, String keyPath) {
         List<String> candidates = parseAcceptLanguage(acceptLanguageHeader);
         if (candidates.stream().noneMatch(l -> l.equalsIgnoreCase(FALLBACK_LANG))) {
             candidates.add(FALLBACK_LANG);
         }
         for (String lang : candidates) {
-            Map<String,Object> map = loadLanguageMap(lang);
+            Map<String, Object> map = loadLanguageMap(lang);
             if (map == null) continue;
             Object v = getNestedValue(map, keyPath);
             if (v != null) {
                 return new PromptResult(lang, v.toString());
             }
         }
-        throw new RuntimeException("Prompt not found for key "+keyPath);
+        throw new IllegalStateException("Prompt not found for key " + keyPath);
     }
 
-    /**
-     * Parsa Accept-Language e torna in una lista di tag
-     * e.g.:
-     *   "it-IT,it;q=0.8,en-US;q=0.7,en;q=0.5"
-     * Ritorna: ["it-IT","it","en-US","en"]
-     */
-    private static List<String> parseAcceptLanguage(String header) {
+    public Optional<String> getPrompt(String language, String keyPath) {
+        if (language == null || language.isBlank()) language = FALLBACK_LANG;
+        List<String> order = new ArrayList<>();
+        order.add(language.toLowerCase(Locale.ROOT));
+        if (!language.equalsIgnoreCase(FALLBACK_LANG)) {
+            order.add(FALLBACK_LANG);
+        }
+        for (String lang : order) {
+            Map<String, Object> map = loadLanguageMap(lang);
+            if (map == null) continue;
+            Object v = getNestedValue(map, keyPath);
+            if (v != null) return Optional.of(v.toString());
+        }
+        return Optional.empty();
+    }
+
+    public String applyVariables(String text, Map<String,String> vars) {
+        if (text == null || vars == null || vars.isEmpty()) return text;
+        String r = text;
+        for (var e : vars.entrySet()) {
+            r = r.replace("{{" + e.getKey() + "}}", e.getValue());
+        }
+        return r;
+    }
+
+    public void invalidate(String language) {
+        if (language != null) cache.remove(language.toLowerCase(Locale.ROOT));
+    }
+
+    public void invalidateAll() {
+        cache.clear();
+    }
+
+    // ---- Internals ----
+
+    private Map<String, Object> loadLanguageMap(String lang) {
+        String key = lang.toLowerCase(Locale.ROOT);
+        return cache.computeIfAbsent(key, l -> {
+            Document doc = collection().find(Filters.eq("id", l)).first();
+            if (doc == null) return null;
+            Map<String, Object> map = new HashMap<>(doc);
+            map.remove("id");
+            return map;
+        });
+    }
+
+    private List<String> parseAcceptLanguage(String header) {
         if (header == null || header.isBlank()) {
             return new ArrayList<>(List.of(FALLBACK_LANG));
         }
-
-        // Dividiamo lista secondo formato standard, e se presente parsiamo la quality
         String[] parts = header.split(",");
         List<LangQ> langqs = new ArrayList<>();
         for (String part : parts) {
@@ -62,9 +115,7 @@ public class LanguageHelper {
                 for (int i = 1; i < seg.length; i++) {
                     String s = seg[i].trim();
                     if (s.startsWith("q=")) {
-                        try {
-                            q = Double.parseDouble(s.substring(2));
-                        } catch (NumberFormatException ignored) {}
+                        try { q = Double.parseDouble(s.substring(2)); } catch (NumberFormatException ignored) {}
                     }
                 }
             }
@@ -72,51 +123,26 @@ public class LanguageHelper {
                 langqs.add(new LangQ(tag, q));
             }
         }
-
-        // Manteniamo ordinamento richiesto dall'header
         langqs.sort((a, b) -> Double.compare(b.q, a.q));
-
-        // Espande: "en-gb" -> ["en-gb","en"]
         LinkedHashSet<String> ordered = new LinkedHashSet<>();
         for (LangQ lq : langqs) {
             ordered.add(lq.tag);
             int dash = lq.tag.indexOf('-');
             if (dash > 0) {
-                ordered.add(lq.tag.substring(0, dash)); // base language
+                ordered.add(lq.tag.substring(0, dash));
             }
         }
-
         return new ArrayList<>(ordered);
     }
 
     private record LangQ(String tag, double q) {}
 
-    /**
-     * Recuper il file, torna null se non trova.
-     */
-    private static Map<String, Object> loadLanguageMap(String lang) {
-        return PROMPT_CACHE.computeIfAbsent(lang, l -> {
-            String resource = RESOURCE_PREFIX + l + RESOURCE_SUFFIX;
-            try (InputStream is = LanguageHelper.class.getResourceAsStream(resource)) {
-                if (is == null) {
-                    return null;
-                }
-                return MAPPER.readValue(is, Map.class);
-            } catch (Exception e) {
-                throw new RuntimeException("Error loading prompt file: " + resource, e);
-            }
-        });
-    }
-
-    /**
-     * Recupera i valori annidati nel file
-     */
     @SuppressWarnings("unchecked")
-    private static Object getNestedValue(Map<String, Object> map, String keyPath) {
+    private Object getNestedValue(Map<String, Object> map, String keyPath) {
         String[] parts = keyPath.split("\\.");
         Object current = map;
         for (String part : parts) {
-            if (current instanceof Map<?, ?> m) {
+            if (current instanceof Map<?,?> m) {
                 current = m.get(part);
             } else {
                 return null;

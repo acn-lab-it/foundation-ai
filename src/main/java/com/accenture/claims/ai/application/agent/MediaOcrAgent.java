@@ -28,6 +28,8 @@ public class MediaOcrAgent {
 
     @Inject
     SessionLanguageContext sessionLanguageContext;
+    @Inject
+    LanguageHelper languageHelper;
 
     private final ChatModel visionModel;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -58,7 +60,18 @@ public class MediaOcrAgent {
      * @param userText testo inputato dall'utente
      * @return JSON con damageCategory / damagedEntity / confidence
      */
-    @Tool("Analyze uploaded media (images or videos). Parameters: sessionId, filePaths[], userText. Return JSON with damageCategory, damagedEntity, confidence, dates, etc.")
+    @Tool("""
+    Analyze uploaded media (images or videos).
+    Parameters:
+    - sessionId: string
+    - filePaths: array of LOCAL FILE PATHS (Windows/Unix).
+    - userText: free text from the user.
+    
+    Behavior:
+    - This tool LOADS the files and converts them to base64 data URLs internally.
+    - Never echo file system paths in the answer.
+    - Return ONLY a JSON with damageCategory, damagedEntity, confidence, dates, etc.
+    """)
     public String analyzeMedia(String sessionId, List<String> filePaths, String userText) throws IOException, InterruptedException {
         List<ImageSource> src = filePaths.stream()
                 .map(ImageSource::new)
@@ -107,11 +120,15 @@ public class MediaOcrAgent {
     private List<ChatMessage> buildPrompt(String sessionId, List<Image> imgs, String userText) {
         List<ChatMessage> list = new ArrayList<>();
         String lang = sessionLanguageContext.getLanguage(sessionId);
-        LanguageHelper.PromptResult PromptResult = LanguageHelper.getPromptWithLanguage(lang, "mediaOcr.mainPrompt");
-        String now = new Date().toString();
-        String finalSystem = PromptResult.prompt.replace("{{today}}", now);
 
+        // Recupera il prompt (passare 'lang' va bene: viene trattato come Accept-Language)
+        LanguageHelper.PromptResult promptResult = languageHelper.getPromptWithLanguage(lang, "mediaOcr.mainPrompt");
+        String finalSystem = languageHelper.applyVariables(
+                promptResult.prompt,
+                Map.of("today", new Date().toString())
+        );
         list.add(SystemMessage.from(finalSystem));
+
         if (userText != null && !userText.isBlank()) {
             list.add(UserMessage.from(userText));
         }

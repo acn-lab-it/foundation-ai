@@ -9,6 +9,7 @@ import dev.langchain4j.model.chat.ChatModel;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -20,6 +21,7 @@ public class DateParserTool {
 
     @Inject ChatModel chatModel;
     @Inject SessionLanguageContext sessionLanguageContext;
+    @Inject LanguageHelper languageHelper;
 
     private static final Pattern ISO_PATTERN =
             Pattern.compile("(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})Z?");
@@ -31,16 +33,21 @@ public class DateParserTool {
         }
 
         String lang = sessionLanguageContext.getLanguage(sessionId); // fallback interno a 'en'
-        ZonedDateTime now = ZonedDateTime.now(); // puoi forzare ZoneId.of("Europe/Rome") se necessario
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Europe/Rome"));  // puoi forzare ZoneId.of("Europe/Rome") se necessario
 
-        // Carica template multilingua
-        LanguageHelper.PromptResult promptResult = LanguageHelper.getPromptWithLanguage(lang, "dateParser.mainPrompt");
-        String prompt = promptResult
-                .prompt
-                .replace("{{now}}", now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-                .replace("{{raw}}", raw);
+        // Carica template multilingua dal DB
+        LanguageHelper.PromptResult promptResult =
+                languageHelper.getPromptWithLanguage(lang, "dateParser.mainPrompt");
 
-        var answer = chatModel.chat(List.of(
+        String prompt = languageHelper.applyVariables(
+                promptResult.prompt,
+                java.util.Map.of(
+                        "now", now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                        "raw", raw
+                )
+        );
+
+        String answer = chatModel.chat(List.of(
                 SystemMessage.from("You convert arbitrary date/time strings to ISO-8601."),
                 UserMessage.from(prompt)
         )).aiMessage().text().trim();
@@ -49,6 +56,9 @@ public class DateParserTool {
         if (!m.find()) {
             throw new IllegalArgumentException("LLM did not return ISO-8601: '" + answer + "'");
         }
+        System.out.println("=== DATE NORMALIZED ===");
+        System.out.println(m.group(1) + "Z");
+        System.out.println("=======================");
         return m.group(1) + "Z";
     }
 }

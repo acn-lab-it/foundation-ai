@@ -16,11 +16,15 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static org.apache.commons.lang.time.DateUtils.truncate;
+
 /**
  * DOCUMENTATO QUI:
  * https://docs.quarkiverse.io/quarkus-langchain4j/dev/messages-and-memory.html
  */
 
+//@TODO: Gestire i messaggi dei tool come tali (ora vanno in default > USER)
 @ApplicationScoped
 public class PersistedChatMemoryStore implements ChatMemoryStore {
 
@@ -46,15 +50,24 @@ public class PersistedChatMemoryStore implements ChatMemoryStore {
         Document doc = coll().find(Filters.eq("_id", memoryId.toString())).first();
         if (doc == null) return List.of();
         List<Document> stored = (List<Document>) doc.getOrDefault("messages", List.of());
+
+        List<Document> filtered = stored.stream()
+                .filter(d -> !"TOOL".equals(d.getString("type")))
+                .toList();
+
+        // Ne teniamo 6 in contesto (3 botta e risposta)
+        int N = 6;
+        int from = Math.max(0, filtered.size() - N);
+        List<Document> window = filtered.subList(from, filtered.size());
+
         List<ChatMessage> out = new ArrayList<>();
-        for (Document d : stored) {
+        for (Document d : window) {
             String type = d.getString("type");
             String text = d.getString("text");
             if (text == null) continue;
             switch (type) {
                 case "SYSTEM" -> out.add(SystemMessage.from(text));
                 case "AI"     -> out.add(AiMessage.from(text));
-                case "USER"   -> out.add(UserMessage.from(text));
                 default       -> out.add(UserMessage.from(text));
             }
         }
@@ -63,7 +76,7 @@ public class PersistedChatMemoryStore implements ChatMemoryStore {
 
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
-        System.out.println(">>> updateMessages " + memoryId + " size=" + messages.size());
+        //System.out.println(">>> updateMessages " + memoryId + " size=" + messages.size());
         List<Document> msgs = messages.stream()
                 .map(this::toDocument)
                 .collect(Collectors.toList());
@@ -73,7 +86,7 @@ public class PersistedChatMemoryStore implements ChatMemoryStore {
                 .append("messages", msgs);
 
         coll().replaceOne(Filters.eq("_id", memoryId.toString()), out, new ReplaceOptions().upsert(true));
-        System.out.println(">>> Persist OK id=" + memoryId + " messages=" + msgs.size());
+        //System.out.println(">>> Persist OK id=" + memoryId + " messages=" + msgs.size());
     }
 
     @Override
@@ -93,6 +106,10 @@ public class PersistedChatMemoryStore implements ChatMemoryStore {
                     .map(c -> ((TextContent) c).text())
                     .collect(Collectors.joining("\n"));
             return new Document("type","USER").append("text", text);
+        } else if (msg instanceof  ToolExecutionResultMessage t){
+            return new Document("type","TOOL")
+                    .append("toolName", t.toolName());
+                    //.append("text", t.text());
         }
         return new Document("type","USER").append("text", msg.toString());
     }

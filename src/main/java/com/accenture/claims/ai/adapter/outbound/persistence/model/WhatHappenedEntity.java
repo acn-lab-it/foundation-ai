@@ -2,20 +2,18 @@ package com.accenture.claims.ai.adapter.outbound.persistence.model;
 
 import io.quarkus.mongodb.panache.common.MongoEntity;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 @MongoEntity(collection = "whathappened")
+@Getter
+@Setter
+@ToString
+@NoArgsConstructor
 public class WhatHappenedEntity {
 
-    @Getter
-    public enum ClaimClassGroup {
-        OWNDAMAGE,
-        LIABILITY,
-        LEGAL;
-    }
-
-    public ClaimClassGroup claimClassGroup;
-    public String whatHappenedContext;
-    public String whatHappenCode;
-
-
+    private String claimClassGroup;
+    private String whatHappenedContext;
+    private String whatHappenedCode;
 }

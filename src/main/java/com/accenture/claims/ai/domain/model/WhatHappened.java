@@ -4,14 +4,8 @@ import com.accenture.claims.ai.adapter.outbound.persistence.model.WhatHappenedEn
 import lombok.Getter;
 
 public class WhatHappened {
-    @Getter
-    public enum ClaimClassGroup {
-        OWNDAMAGE,
-        LIABILITY,
-        LEGAL;
-    }
 
-    public WhatHappenedEntity.ClaimClassGroup claimClassGroup;
+    public String claimClassGroup;
     public String whatHappenedContext;
     public String whatHappenCode;
 

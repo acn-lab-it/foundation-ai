@@ -1,35 +1,41 @@
 package com.accenture.claims.ai.application.agent;
 
-import com.accenture.claims.ai.application.tool.SummaryTool;
+import com.accenture.claims.ai.adapter.outbound.persistence.repository.whatHappened.WhatHappenedClassifierByPrompt;
+import com.accenture.claims.ai.application.tool.*;
 import com.accenture.claims.ai.domain.repository.PolicyRepository;
-import com.accenture.claims.ai.application.tool.AdministrativeCheckTool;
-import com.accenture.claims.ai.application.tool.DateParserTool;
-import com.accenture.claims.ai.domain.repository.WhatHappenedRepository;
-import dev.langchain4j.service.SystemMessage;
-import io.quarkiverse.langchain4j.RegisterAiService;
-import io.quarkiverse.langchain4j.ToolBox;
+import com.accenture.claims.ai.guardrails.NoProgressWithoutToolGuard;
+import com.accenture.claims.ai.guardrails.NonEmptyOutputGuard;
+import com.accenture.claims.ai.guardrails.PromptInjectionGuard;
 import dev.langchain4j.service.MemoryId;
+import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
+import io.quarkiverse.langchain4j.RegisterAiService;
+import io.quarkiverse.langchain4j.ToolBox;
+import io.quarkiverse.langchain4j.guardrails.InputGuardrails;
+import io.quarkiverse.langchain4j.guardrails.OutputGuardrails;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @RegisterAiService
 @ApplicationScoped
-@SystemMessage("{{systemPrompt}}")
+@SystemMessage("{{systemPrompt}}") // var. risolta via @V
+@InputGuardrails(PromptInjectionGuard.class)
+@OutputGuardrails({ NonEmptyOutputGuard.class,
+        NoProgressWithoutToolGuard.class })
 public interface FNOLAssistantAgent {
 
     @ToolBox({
-        PolicyRepository.class,
-        AdministrativeCheckTool.class,
-        DateParserTool.class,
-        WhatHappenedRepository.class,
-        MediaOcrAgent.class,
-        SummaryTool.class
+            PolicyRepository.class,
+            AdministrativeCheckTool.class,
+            DateParserTool.class,
+            MediaOcrAgent.class,
+            SummaryTool.class,
+            PolicyFinderTool.class,
+            TechnicalCoverageTool.class,
+            WhatHappenedClassifierByPrompt.class
     })
-    /*
-     * @V - Annotazione per passarsi parametri dinamici, in questo caso passiamo systemPrompt dall'esterno e lo iniettiamo in:
-     * @SystemMessage("{{systemPrompt}}")
-     */
-    String chat( @MemoryId String sessionId, @V("systemPrompt") String systemMessage, @UserMessage String userMessage);
+    String chat(@MemoryId String sessionId,
+                @V("systemPrompt") String systemPrompt,
+                @UserMessage String userMessage);
 
 }

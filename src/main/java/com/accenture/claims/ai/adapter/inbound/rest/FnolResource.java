@@ -27,6 +27,10 @@ public class FnolResource {
     FNOLAssistantAgent agent;
     @Inject
     SessionLanguageContext sessionLanguageContext;
+    @Inject
+    LanguageHelper languageHelper;
+    @Inject
+    GuardrailsContext guardrailsContext;
 
     public static class ChatResponseDto {
         public String sessionId;
@@ -77,15 +81,30 @@ public class FnolResource {
         }
 
         // Recupero la lingua e il main prompt del superagent (fallback su "en" se non gestiamo la lingua richiesta)
-        LanguageHelper.PromptResult promptResult = LanguageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.mainPrompt");
+        LanguageHelper.PromptResult promptResult =
+                languageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.mainPrompt");
 
         // Inietto la sessionId corrente nel prompt per renderlo aware del vero sessionID (scopo: evitare confusioni nelle chiamate interne)
-        String systemPrompt = promptResult.prompt.replace("{{sessionId}}", sessionId);
+        String systemPrompt = languageHelper.applyVariables(promptResult.prompt, Map.of("sessionId", sessionId));
 
         // Imposto la lingua di sessione per i sotto-prompt e pro-futuro
         sessionLanguageContext.setLanguage(sessionId, promptResult.language);
 
+        // Imposto il contesto per i guardrails
+        guardrailsContext.setSessionId(sessionId);
+        guardrailsContext.setSystemPrompt(systemPrompt);
+
         String raw = agent.chat(sessionId, systemPrompt, userMessage);
+
+        System.out.println("====================================================");
+        System.out.println("RAW: " + raw);
+        System.out.println("====================================================");
+        if (raw == null || raw.trim().isEmpty() || "null".equalsIgnoreCase(raw.trim())) {
+            // fallback lato server giusto per non restituire mai un body vuoto al client
+            raw = """
+              {"answer":"Something went wrong. Try Again."}
+            """;
+        }
 
         ChatResponseDto dto;
         try {
