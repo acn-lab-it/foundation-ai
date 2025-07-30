@@ -5,7 +5,9 @@ import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputStore
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -36,6 +38,8 @@ public class FnolResource {
     @Inject
     FinalOutputJSONStore finalOutputJSONStore;
 
+    private static final ObjectMapper M = new ObjectMapper();
+
     public static class ChatResponseDto {
         public String sessionId;
         public String answer;
@@ -51,7 +55,7 @@ public class FnolResource {
     @POST
     @jakarta.ws.rs.Path("/chat")
     @jakarta.enterprise.context.control.ActivateRequestContext
-    public Response chat(@BeanParam ChatForm form, @HeaderParam("Accept-Language") String acceptLanguage) {
+    public Response chat(@BeanParam ChatForm form, @HeaderParam("Accept-Language") String acceptLanguage) throws Exception {
 
         if (form == null || form.userMessage == null) {
             return Response.status(Response.Status.BAD_REQUEST)
@@ -64,6 +68,15 @@ public class FnolResource {
                 : form.sessionId;
 
         String userMessage = form.userMessage;
+
+        if (userMessage.toLowerCase().contains("claim summary")){
+            var fo = finalOutputJSONStore.get("final_output", sessionId);
+            ObjectNode complete = buildComplete(finalOutputJSONStore, sessionId, mockJson);
+            System.out.println("========== CURRENT MOCKED_OUTPUT ==========");
+            System.out.println(fo == null ? "<empty>" : complete.toPrettyString());
+            System.out.println("===========================================\n");
+            return Response.ok(new ChatResponseDto(sessionId, "Here is the final claim Summary. Thank you for using our service.", complete)).build();
+        }
 
         // Gestione eventuali file
         if (form.files != null && !form.files.isEmpty()) {
@@ -122,10 +135,6 @@ public class FnolResource {
         System.out.println("RAW: " + raw);
         System.out.println("==========================================================\n");
         if (raw == null || raw.trim().isEmpty() || "null".equalsIgnoreCase(raw.trim())) {
-            // fallback lato server giusto per non restituire mai un body vuoto al client
-            raw = """
-              {"answer":"Something went wrong. Try Again."}
-            """;
             return Response.serverError().build();
         }
 
@@ -149,4 +158,74 @@ public class FnolResource {
 
         return Response.ok(dto).build();
     }
+
+    /** merge ricorsivo “in avanti”: copia SOLO i campi mancanti */
+    private static void fillMissing(ObjectNode target, ObjectNode defaults) {
+        defaults.fields().forEachRemaining(e -> {
+            String k = e.getKey();
+            JsonNode defVal = e.getValue();
+
+            if (!target.has(k) || target.get(k).isNull()) {
+                // campo assente → copia default (deep copy se oggetto / array)
+                target.set(k, defVal.deepCopy());
+            } else if (defVal.isObject() && target.get(k).isObject()) {
+                // entrambi object → ricorri
+                fillMissing((ObjectNode) target.get(k), (ObjectNode) defVal);
+            }
+            // se esiste già un valore NON nullo lo lasciamo com’è
+        });
+    }
+
+    /** restituisce un ObjectNode COMPLETO */
+    public static ObjectNode buildComplete(
+            FinalOutputJSONStore store, String sessionId, String mockJson) throws Exception {
+
+        // 1. JSON mock di riferimento
+        ObjectNode mock = (ObjectNode) M.readTree(mockJson);
+
+        // 2. JSON parziale dal DB (vuoto se non esiste)
+        ObjectNode fo = store.get("final_output", sessionId);
+
+        // 3. copia profonda di fo, poi riempi i “buchi” con i default
+        ObjectNode complete = fo.deepCopy();
+        fillMissing(complete, mock);
+
+        return complete;
+    }
+
+    String mockJson = """
+        {
+          "_id": "1e33bfb4-1ea8-4e05-9090-1d6495f52f37",
+          "policyNumber": "AUTHHR00026397",
+          "policyStatus": "ACTIVE",
+          "reporter": {
+            "firstName": "Lukas",
+            "lastName": "Baumgartner",
+            "contacts": {
+              "email": "allianz@test.at",
+              "mobile": "+61456677674"
+            }
+          },
+          "incidentDate": "2025-07-27T14:30:00Z",
+          "whatHappenedCode": "NM_FIRE",
+          "whatHappenedContext": "Fire (excl. Bushfire and Grassfire)",
+          "incidentLocation": "Linzer Str. 225, Vienna 1010",
+          "imagesUploaded": [
+            {
+              "mediaName": "burnt-american-fridge-after-kitchen-house-fire-BMA3DX.jpg",
+              "mediaDescription": "PROPERTY - Kitchen",
+              "mediaType": "image"
+            }
+          ],
+          "circumstances": {
+            "details": "Incendio o altri eventi",
+            "notes": "Mentre il cliente stava cucinando, è scoppiato un incendio in cucina. L’evento è avvenuto il 27/07/2025 alle 14.30 e l’indirizzo è Linzer Str. 225, Vienna 1010"
+          },
+          "damageDetails": "PROPERTY ‑ Kitchen (conf. 0.95)",
+          "administrativeCheck": {
+            "passed": true
+          }
+        }
+        """;
+
 }
