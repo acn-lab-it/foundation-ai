@@ -27,13 +27,13 @@ public class WhatHappenedClassifierByPrompt {
 
     @Tool("""
           Classify a textual loss description.
-          Return a JSON ONLY:
+          @Return a JSON ONLY:
           { "whatHappenedCode": "...",
             "whatHappenedContext": "...",
             "claimClassGroup": "...",
             "confidence": 0‑1 }
           """)
-    public String classify(String userText) {
+    public String classifyWhatHappened(String userText) {
         if (userText == null || userText.isBlank()) {
             return fallbackJson();
         }
@@ -55,7 +55,7 @@ public class WhatHappenedClassifierByPrompt {
         // elenco codice = descrizione (gruppo)
         String catalog = cats.stream()
                 .map(e -> "%s = %s [%s]"
-                        .formatted(e.getWhatHappenedCode(),
+                        .formatted(e.getWhatHappenCode(),
                                 e.getWhatHappenedContext(),
                                 e.getClaimClassGroup()))
                 .collect(Collectors.joining("\n"));
@@ -63,12 +63,14 @@ public class WhatHappenedClassifierByPrompt {
         // 3) prompt - simplified system message
         SystemMessage sys = SystemMessage.from("""
         Sei un classificatore assicurativo esperto.
-        Scegli ESATTAMENTE uno dei codici nella lista seguente.
+        Ogni stringa è strutturata come: "CODICE" = "DESCRIZIONE" [CLASSE_GRUPPO].
+        Scegli ESATTAMENTE uno dei codici nella lista seguente per whatHappenedCode.
+        Scegli ESATTAMENTE una delle descrizioni nella lista seguente per whatHappenedContext.
         Se nessun codice è adatto, usa UNKNOWN.
         Rispondi **esclusivamente** con un JSON:
-        { "whatHappenedCode": "...",
-          "whatHappenedContext": "...",
-          "claimClassGroup": "...",
+        { "whatHappenedCode": <CODICE>,
+          "whatHappenedContext": <DESCRIZIONE>,
+          "claimClassGroup": <CLASSE_GRUPPO>,
           "confidence": 0‑1 }
         Non aggiungere testo extra.
     """);
@@ -92,6 +94,10 @@ public class WhatHappenedClassifierByPrompt {
 
         String raw = resp.aiMessage().text();
         String json = extractJson(raw);
+        System.out.println("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
+        System.out.println(raw);
+        System.out.println(json);
+        System.out.println("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
         return json != null ? json : fallbackJson();
     }
 

@@ -13,9 +13,9 @@ public class NonEmptyOutputGuard implements OutputGuardrail {
     public OutputGuardrailResult validate(OutputGuardrailParams params) {
         var ai = params.responseFromLLM();
         // Se il modello ha richiesto l'esecuzione di tool, tutto ok
-        /*if (ai != null && ai.toolExecutionRequests() != null && !ai.toolExecutionRequests().isEmpty()) {
+        if (ai != null && ai.toolExecutionRequests() != null && !ai.toolExecutionRequests().isEmpty()) {
             return success();
-        }*/
+        }
 
         String text = (ai == null || ai.text() == null) ? "" : ai.text().trim();
 

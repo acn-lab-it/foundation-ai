@@ -1,5 +1,6 @@
 package com.accenture.claims.ai.adapter.inbound.rest;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputStore;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
@@ -31,6 +32,8 @@ public class FnolResource {
     LanguageHelper languageHelper;
     @Inject
     GuardrailsContext guardrailsContext;
+    @Inject
+    FinalOutputStore finalOutputStore;
 
     public static class ChatResponseDto {
         public String sessionId;
@@ -46,6 +49,7 @@ public class FnolResource {
 
     @POST
     @jakarta.ws.rs.Path("/chat")
+    @jakarta.enterprise.context.control.ActivateRequestContext
     public Response chat(@BeanParam ChatForm form, @HeaderParam("Accept-Language") String acceptLanguage) {
 
         if (form == null || form.userMessage == null) {
@@ -131,6 +135,10 @@ public class FnolResource {
             Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
                     ? mapper.convertValue(node.get("finalResult"), Object.class)
                     : null;
+            var fo = finalOutputStore.get(sessionId);
+            System.out.println("========== CURRENT FINAL_OUTPUT ==========");
+            System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
+            System.out.println("==========================================\n");
             dto = new ChatResponseDto(sessionId, answer, finalResult);
         } catch (Exception ex) {
             // Se il modello non segue lo schema, fallback

@@ -3,6 +3,7 @@ package com.accenture.claims.ai.application.agent;
 import com.accenture.claims.ai.adapter.outbound.persistence.repository.whatHappened.WhatHappenedClassifierByPrompt;
 import com.accenture.claims.ai.application.tool.*;
 import com.accenture.claims.ai.domain.repository.PolicyRepository;
+import com.accenture.claims.ai.guardrails.FinalOutputGuard;
 import com.accenture.claims.ai.guardrails.NoProgressWithoutToolGuard;
 import com.accenture.claims.ai.guardrails.NonEmptyOutputGuard;
 import com.accenture.claims.ai.guardrails.PromptInjectionGuard;
@@ -20,8 +21,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 @SystemMessage("{{systemPrompt}}") // var. risolta via @V
 @InputGuardrails(PromptInjectionGuard.class)
-@OutputGuardrails({ NonEmptyOutputGuard.class,
-        NoProgressWithoutToolGuard.class })
+@OutputGuardrails({
+        NonEmptyOutputGuard.class,
+        NoProgressWithoutToolGuard.class,
+        FinalOutputGuard.class
+})
 public interface FNOLAssistantAgent {
 
     @ToolBox({
@@ -30,6 +34,7 @@ public interface FNOLAssistantAgent {
             DateParserTool.class,
             MediaOcrAgent.class,
             SpeechToTextAgent.class,
+            FinalOutputTool.class,
             SummaryTool.class,
             PolicyFinderTool.class,
             TechnicalCoverageTool.class,

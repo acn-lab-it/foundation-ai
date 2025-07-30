@@ -15,5 +15,5 @@ public class WhatHappenedEntity {
 
     private String claimClassGroup;
     private String whatHappenedContext;
-    private String whatHappenedCode;
+    private String whatHappenCode;
 }
