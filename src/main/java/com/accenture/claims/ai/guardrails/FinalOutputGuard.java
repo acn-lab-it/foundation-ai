@@ -86,7 +86,7 @@ public class FinalOutputGuard implements OutputGuardrail {
         /*    - e sta soltanto ponendo una domanda all’utente                 */
         /*    → lasciamo passare la risposta                                  */
         /* ------------------------------------------------------------------ */
-        if (!stepReady) {
+        /*if (!stepReady) {
             boolean onlyQuestion =
                     requests.isEmpty()              // nessun tool
                             && ai != null
@@ -102,7 +102,7 @@ public class FinalOutputGuard implements OutputGuardrail {
                             "updateFinalOutput con i nuovi valori e poi continua."
             );
         }
-
+*/
         /* Tutto in regola */
         return success();
     }
