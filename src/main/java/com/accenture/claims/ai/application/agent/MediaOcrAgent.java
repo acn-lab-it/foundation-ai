@@ -1,9 +1,13 @@
 package com.accenture.claims.ai.application.agent;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ImageSource;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
@@ -15,6 +19,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.mapstruct.factory.Mappers;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -30,6 +35,8 @@ public class MediaOcrAgent {
     SessionLanguageContext sessionLanguageContext;
     @Inject
     LanguageHelper languageHelper;
+    @Inject
+    FinalOutputJSONStore finalOutputJSONStore;
 
     private final ChatModel visionModel;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -100,11 +107,6 @@ public class MediaOcrAgent {
                 }
             }
         }
-        return analyze(sessionId, images, userText);
-    }
-
-    /* Analisi di foto + input utente */
-    private String analyze(String sessionId, List<Image> images, String userText) {
         List<ChatMessage> prompt = buildPrompt(sessionId, images, userText);
         ChatResponse resp = visionModel.chat(ChatRequest.builder()
                 .messages(prompt)
@@ -112,8 +114,56 @@ public class MediaOcrAgent {
                 .maxOutputTokens(1_024)
                 .build());
         String raw = resp.aiMessage().text();
-        return extractJsonBlock(raw).orElse(DEFAULT_JSON_FALLBACK);
+        String json = extractJsonBlock(raw).orElse(DEFAULT_JSON_FALLBACK);
+
+        /* 3) patch in final_output ------------------------------------ */
+        try {
+            JsonNode result = mapper.readTree(json);
+
+            ArrayNode imagesArr = mapper.createArrayNode();
+            for (ImageSource s : sources) {
+                ObjectNode m  = mapper.createObjectNode();
+                m.put("mediaName", Path.of(s.getRef()).getFileName().toString());
+                // descrizione sintetica: <damageCategory> - <damagedEntity>
+                String descr = result.path("damageCategory").asText("UNKNOWN") +
+                        " - " +
+                        result.path("damagedEntity").asText("UNKNOWN");
+                m.put("mediaDescription", descr);
+                m.put("mediaType", isVideo(Path.of(s.getRef())) ? "video" : "image");
+                imagesArr.add(m);
+            }
+
+            /* 3.b  circumstances + damageDetails */
+            ObjectNode patch = mapper.createObjectNode();
+            patch.set("imagesUploaded", imagesArr);
+
+            ObjectNode circumstances = mapper.createObjectNode();
+            circumstances.put("details",
+                    result.path("eventType").asText("UNKNOWN"));
+            circumstances.put("notes", safe(userText));
+            patch.set("circumstances", circumstances);
+
+            patch.put("damageDetails", descrFromResult(result));
+
+            /* merge sul documento sessione */
+            finalOutputJSONStore.put("final_output", sessionId, null, patch);
+
+        } catch (Exception ex) {
+            ex.printStackTrace();   // non bloccare: restituiamo comunque json fallback
+        }
+        return json;
     }
+
+    /* Analisi di foto + input utente */
+    private static String descrFromResult(JsonNode r) {
+        return "%s ‑ %s (conf. %.2f)".formatted(
+                r.path("damageCategory").asText("UNKNOWN"),
+                r.path("damagedEntity").asText("UNKNOWN"),
+                r.path("confidence").asDouble(0.0)
+        );
+    }
+
+    private static String safe(String s) { return s == null ? "" : s; }
 
 
     /* Il prompt "main" per l'analisi*/

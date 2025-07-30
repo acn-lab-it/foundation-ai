@@ -1,5 +1,8 @@
 package com.accenture.claims.ai.application.tool;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.PolicySelectionFlagStore;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.FindIterable;
@@ -9,6 +12,7 @@ import dev.langchain4j.agent.tool.Tool;
 import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Default;
 import jakarta.inject.Inject;
 import org.bson.Document;
 import org.bson.conversions.Bson;
@@ -29,6 +33,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class PolicyFinderTool {
 
     @Inject MongoClient mongo;
+    @Inject
+    FinalOutputJSONStore finalOutputJSONStore;
+    @Inject
+    PolicySelectionFlagStore flagStore;
 
     @ConfigProperty(name = "quarkus.mongodb.database", defaultValue = "local_db")
     String dbName;
@@ -56,7 +64,10 @@ public class PolicyFinderTool {
      *   "holder": { "firstName":"...", "lastName":"...", "customerId":"...", "emails":["..."], "mobiles":["..."] }  // solo per EXACT o SIMILAR
      * }
      */
-    @Tool("PolicyFinder.FuzzySearch: Cerca il policy holder con fuzzy match su nome/cognome; usa email/cellulare se disponibili. Parametri: sessionId, firstName, lastName, email?, mobile?")
+    @Tool(
+            name = "fuzzySearch",
+            value = "fuzzySearch: Cerca il policy holder con fuzzy match su nome/cognome; usa email/cellulare se disponibili. Parametri: sessionId, firstName, lastName, email?, mobile?"
+    )
     public String fuzzySearch(String sessionId, String firstName, String lastName, @Nullable String email, @Nullable String mobile) {
         String fn = safe(firstName);
         String ln = safe(lastName);
@@ -124,6 +135,7 @@ public class PolicyFinderTool {
 
     // -------------------- TOOL 2: RETRIEVE POLICIES --------------------
 
+
     /**
      * Recupera le polizze per il holder indicato (match case-insensitive; se email/mobile presenti li usa).
      * Ritorna JSON:
@@ -134,7 +146,10 @@ public class PolicyFinderTool {
      *   ]
      * }
      */
-    @Tool("PolicyFinder.RetrievePolicy: Recupera polizze associate a firstName/lastName (email/mobile opzionali). Parametri: sessionId, firstName, lastName, email?, mobile?")
+    @Tool(
+            name = "retrievePolicy",
+            value = "retrievePolicy: Recupera polizze associate a firstName/lastName (email/mobile opzionali). Parametri: sessionId, firstName, lastName, email?, mobile?"
+    )
     public String retrievePolicy(String sessionId, String firstName, String lastName,@Nullable String email,@Nullable String mobile) {
         String fn = safe(firstName);
         String ln = safe(lastName);
@@ -161,10 +176,104 @@ public class PolicyFinderTool {
         }
 
         String resultType = items.isEmpty() ? "NONE" : (items.size() == 1 ? "SINGLE" : "LIST");
-        return json(Map.of(
-                "resultType", resultType,
-                "items", items
-        ));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("resultType", resultType);
+        out.put("items",      items);
+        out.put("_sysHint",
+                """
+                ⚠️ ISTRUZIONE OBBLIGATORIA ⚠️
+                DOPO che l'agente conferma o sceglie una polizza, e PRIMA di passare allo STEP 3:
+                1. DEVI ASSOLUTAMENTE chiamare il tool setSelectedPolicy
+                2. Usa esattamente questi parametri:
+                   - sessionId: lo stesso sessionId usato per retrievePolicy
+                   - policyNumber: il numero della polizza scelta/confermata
+                
+                Esempio:
+                setSelectedPolicy(sessionId, "MTRHHR00026398")
+                
+                ⚠️ QUESTO PASSAGGIO È OBBLIGATORIO E NON OPZIONALE ⚠️
+                Il sistema bloccherà qualsiasi tentativo di procedere allo STEP 3 senza prima chiamare setSelectedPolicy.
+                """
+        );
+        
+        // Aggiungi anche un campo specifico per il numero di polizza per renderlo più evidente
+        out.put("_mandatoryAction", "setSelectedPolicy");
+        flagStore.setPending(sessionId, true);
+        return json(out);
+    }
+
+    /**
+     * PolicyFinder.setSelectedPolicy
+     * Seleziona la polizza definitiva e la salva nella collection (final_output di default).
+     * Parametri: sessionId, policyNumber, collection? (opzionale, default "final_output")
+     *
+     * @return  { "status":"OK" }  oppure { "error":"not_found" }
+     */
+    @Tool(
+            value = """
+            setSelectedPolicy: salva nel FINAL_OUTPUT la polizza selezionata.
+            Parametri:
+              sessionId     string   // id sessione corrente
+              policyNumber  string   // numero polizza scelta
+            """,
+            name = "setSelectedPolicy"
+    )
+    public String setSelectedPolicy(String sessionId,
+                                    String policyNumber) {
+        
+        System.out.println("========== setSelectedPolicy CALLED ==========");
+        System.out.println("sessionId: " + sessionId);
+        System.out.println("policyNumber: " + policyNumber);
+        System.out.println("==============================================");
+
+        String collection = "final_output";
+
+        // 1. fetch singola polizza
+        Document pol = coll().find(Filters.eq("policyNumber", policyNumber)).first();
+        if (pol == null) {
+            return json(Map.of("error", "not_found"));
+        }
+
+        // 2. estrai campi necessari
+        String status = safe(pol.getString("policyStatus"));
+
+        // • holder principale = il primo in lista
+        List<Document> holders = (List<Document>) pol.getOrDefault("policyHolders", List.of());
+        Document h = holders.isEmpty() ? new Document() : holders.getFirst();
+
+        String hFirst = safe(h.getString("firstName"));
+        String hLast  = safe(h.getString("lastName"));
+
+        String email  = null;
+        String mobile = null;
+        List<Document> channels = (List<Document>) h.getOrDefault("contactChannels", List.of());
+        for (Document c : channels) {
+            String type = safe(c.getString("communicationType")).toUpperCase(Locale.ROOT);
+            String val  = safe(c.getString("communicationDetails"));
+            if (email == null && "EMAIL".equals(type)  && !val.isBlank()) email  = val;
+            if (mobile == null && "MOBILE".equals(type) && !val.isBlank()) mobile = val;
+        }
+
+        // 3. costruisci patch JSON
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.put("policyNumber", policyNumber);
+        patch.put("policyStatus", status);
+
+        ObjectNode contacts = MAPPER.createObjectNode();
+        if (email  != null) contacts.put("email" , email);
+        if (mobile != null) contacts.put("mobile", mobile);
+
+        ObjectNode reporter = MAPPER.createObjectNode();
+        if (!hFirst.isBlank()) reporter.put("firstName", hFirst);
+        if (!hLast .isBlank()) reporter.put("lastName" , hLast);
+        if (contacts.size()   > 0)      reporter.set("contacts", contacts);
+
+        if (reporter.size() > 0) patch.set("reporter", reporter);
+
+        // 4. salva / merge
+        finalOutputJSONStore.put(collection, sessionId, "", patch);
+        flagStore.setPending(sessionId, false);
+        return json(Map.of("status", "OK"));
     }
 
     // -------------------- Helpers DB --------------------

@@ -1,5 +1,6 @@
 package com.accenture.claims.ai.adapter.inbound.rest;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputStore;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
@@ -33,7 +34,7 @@ public class FnolResource {
     @Inject
     GuardrailsContext guardrailsContext;
     @Inject
-    FinalOutputStore finalOutputStore;
+    FinalOutputJSONStore finalOutputJSONStore;
 
     public static class ChatResponseDto {
         public String sessionId;
@@ -135,11 +136,11 @@ public class FnolResource {
             Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
                     ? mapper.convertValue(node.get("finalResult"), Object.class)
                     : null;
-            var fo = finalOutputStore.get(sessionId);
+            var fo = finalOutputJSONStore.get("final_output", sessionId);
             System.out.println("========== CURRENT FINAL_OUTPUT ==========");
             System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
             System.out.println("==========================================\n");
-            dto = new ChatResponseDto(sessionId, answer, finalResult);
+            dto = new ChatResponseDto(sessionId, answer, fo);
         } catch (Exception ex) {
             // Se il modello non segue lo schema, fallback
             dto = new ChatResponseDto(sessionId, raw, null);

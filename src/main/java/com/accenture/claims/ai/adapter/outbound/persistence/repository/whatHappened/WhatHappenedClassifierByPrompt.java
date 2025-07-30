@@ -1,8 +1,12 @@
 package com.accenture.claims.ai.adapter.outbound.persistence.repository.whatHappened;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.outbound.persistence.model.WhatHappenedEntity;
 import com.accenture.claims.ai.adapter.outbound.persistence.repository.WhatHappenedRepositoryAdapter;
 import com.accenture.claims.ai.adapter.outbound.persistence.repository.whatHappened.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.*;
@@ -24,15 +28,38 @@ public class WhatHappenedClassifierByPrompt {
     ChatModel chatModel;
     @Inject
     WhatHappenedRepositoryAdapter repo;
+    @Inject
+    FinalOutputJSONStore finalOutputJSONStore;
+
+    private static final ObjectMapper M = new ObjectMapper();
 
     @Tool("""
-          Classify a textual loss description.
+          Classify a textual loss description and persist the result.
+          @param sessionId  current chat session
+          @param userText   raw description from the agent
           @Return a JSON ONLY:
-          { "whatHappenedCode": "...",
-            "whatHappenedContext": "...",
-            "claimClassGroup": "...",
-            "confidence": 0‑1 }
-          """)
+                  { "whatHappenedCode": "...",
+                    "whatHappenedContext": "...",
+                    "claimClassGroup": "...",
+                    "confidence": 0‑1 }
+                  ""
+      """)
+    public String classifyAndSave(String sessionId, String userText, String address) throws JsonProcessingException {
+
+        String json = classifyWhatHappened(userText);   // ← metodo esistente
+        ObjectNode result = (ObjectNode) M.readTree(json);
+
+        // Patch FINAL_OUTPUT
+        ObjectNode patch = M.createObjectNode()
+                .put("whatHappenedCode", result.path("whatHappenedCode").asText())
+                .put("whatHappenedContext", result.path("whatHappenedContext").asText())
+                .put("incidentLocation", address);
+
+        finalOutputJSONStore.put("final_output",sessionId, "", patch);
+
+        return json;
+    }
+
     public String classifyWhatHappened(String userText) {
         if (userText == null || userText.isBlank()) {
             return fallbackJson();

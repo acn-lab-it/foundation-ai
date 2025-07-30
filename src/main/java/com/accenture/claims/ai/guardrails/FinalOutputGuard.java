@@ -1,170 +1,77 @@
 package com.accenture.claims.ai.guardrails;
 
 import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
-import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputStore;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.PolicySelectionFlagStore;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
-import io.quarkiverse.langchain4j.guardrails.OutputGuardrail;
-import io.quarkiverse.langchain4j.guardrails.OutputGuardrailParams;
-import io.quarkiverse.langchain4j.guardrails.OutputGuardrailResult;
+import io.quarkiverse.langchain4j.guardrails.*;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Guardrail che garantisce il popolamento progressivo di FINAL_OUTPUT
- * e impedisce di saltare gli step obbligatori.
+ * Blocca qualsiasi tool finché non è stata selezionata una polizza
+ * Impone di chiamare <code>setSelectedPolicy</code> dopo la scelta.
  */
 @ApplicationScoped
 public class FinalOutputGuard implements OutputGuardrail {
 
-    @Inject GuardrailsContext ctx;
-    @Inject FinalOutputStore  store;
+    private static final Logger LOG = Logger.getLogger(FinalOutputGuard.class);
 
-    /* ====================================================================== */
-    /*  MAIN                                                                  */
-    /* ====================================================================== */
+    @Inject GuardrailsContext ctx;
+    @Inject
+    PolicySelectionFlagStore flagStore;
+
+    /* ────────────────────────────────────────────────────────── */
 
     @Override
-    public OutputGuardrailResult validate(OutputGuardrailParams params) {
+    public OutputGuardrailResult validate(OutputGuardrailParams p) {
+        String sessionId = ctx.getSessionId();
+        LOG.info("FinalOutputGuard checking response for session: " + sessionId);
+        LOG.info("Flag Pending Policy for session: " + flagStore.isPending(sessionId));
+        if (flagStore.isPending(sessionId)) {
 
-        /* JSON corrente (può essere null al primissimo turno) */
-        ObjectNode fo = store.get(ctx.getSessionId());
+            AiMessage ai = p.responseFromLLM();
+            // permetti SOLO testo che termini con “?”
+            boolean justAQuestion =
+                    ai != null &&
+                            ai.text() != null &&
+                            ai.text().trim().endsWith("?");
 
-        /* ------------------------------------------------------------------ */
-        /* 1. Se non abbiamo ancora FIRST / LAST NAME blocchiamo tutto        */
-        /* ------------------------------------------------------------------ */
-        boolean hasReporter =
-                hasNonEmpty(fo,"reporter","firstName") &&
-                        hasNonEmpty(fo,"reporter","lastName");
+            if (justAQuestion) return success();
 
-        AiMessage ai = params.responseFromLLM();
-        List<ToolExecutionRequest> requests =
-                ai == null ? List.of() : ai.toolExecutionRequests();
-
-        if (!hasReporter) {
-            // consentiamo SOLO getFinalOutput / updateFinalOutput
-            boolean onlyFoTools = requests.stream()
-                    .allMatch(r -> "getFinalOutput".equals(r.name())
-                            || "updateFinalOutput".equals(r.name()));
-
-            if (!onlyFoTools) {
-                return reprompt(
-                        "Devi prima salvare nome e cognome con updateFinalOutput.",
-                        "Chiedi firstName / lastName, poi chiama:\n" +
-                                "updateFinalOutput({ \"reporter\":{ \"firstName\":\"…\",\"lastName\":\"…\" } })"
-                );
-            }
-            // sta solo chiedendo i dati o aggiornando il reporter → ok
-            return success();
-        }
-
-        /* ------------------------------------------------------------------ */
-        /* 2. Verifica campi obbligatori in base allo STEP corrente           */
-        /* ------------------------------------------------------------------ */
-        int currentStep   = detectStep(fo);
-        boolean stepReady = switch (currentStep) {
-            case 1 -> hasReporter;
-            case 2 -> hasNonEmpty(fo,"policyNumber")
-                    && hasNonEmpty(fo,"policyStatus");
-            case 3 -> hasNonEmpty(fo,"incidentDate")
-                    && hasNonEmpty(fo,"incidentLocation")
-                    && hasNonEmpty(fo,"whatHappenedContext")
-                    && hasNonEmpty(fo,"whatHappenedCode");
-            case 4 -> hasNonEmpty(fo,"damageDetails")
-                    && hasNonEmpty(fo,"circumstances","details");
-            case 5 -> fo.path("administrativeCheck").hasNonNull("passed");
-            case 6 -> allFieldsPresent(fo);
-            default -> true;                 // step 0 (welcome)
-        };
-
-        /* ------------------------------------------------------------------ */
-        /* 3. Tolleranza: se lo step non è pronto MA                           */
-        /*    - l’AI NON invoca tool di step successivi                       */
-        /*    - e sta soltanto ponendo una domanda all’utente                 */
-        /*    → lasciamo passare la risposta                                  */
-        /* ------------------------------------------------------------------ */
-        /*if (!stepReady) {
-            boolean onlyQuestion =
-                    requests.isEmpty()              // nessun tool
-                            && ai != null
-                            && ai.text() != null
-                            && !ai.text().isBlank();           // c'è testo
-
-            if (onlyQuestion) return success();
-
-            // altrimenti blocchiamo e repromptiamo
             return reprompt(
-                    "Mancano dati obbligatori per lo STEP " + currentStep + ".",
-                    "Recupera le informazioni mancanti, chiama " +
-                            "updateFinalOutput con i nuovi valori e poi continua."
+                    "⚠️ ERRORE: Devi chiamare setSelectedPolicy prima di procedere allo STEP 3 ⚠️",
+                    """
+                    ⚠️ ISTRUZIONE OBBLIGATORIA ⚠️
+                    
+                    Hai già mostrato le polizze all'utente, ma NON hai chiamato il tool setSelectedPolicy.
+                    
+                    DEVI ASSOLUTAMENTE:
+                    1. Se l'utente non ha ancora scelto una polizza:
+                       - Chiedi all'utente di scegliere una polizza specifica
+                       - Attendi la risposta dell'utente
+                    
+                    2. DOPO che l'utente ha scelto o confermato una polizza:
+                       - Chiama IMMEDIATAMENTE il tool setSelectedPolicy con:
+                         * sessionId: lo stesso sessionId usato per retrievePolicy
+                         * policyNumber: il numero della polizza scelta dall'utente
+                    
+                    Esempio:
+                    setSelectedPolicy(sessionId, "MTRHHR00026398")
+                    
+                    NON puoi procedere allo STEP 3 senza prima chiamare questo tool.
+                    """
             );
         }
-*/
-        /* Tutto in regola */
+
+        /* Nessuna scelta pendente → tutto OK */
+        LOG.info("No pending policy selection for session: " + sessionId + " - allowing response");
         return success();
     }
 
-    /* ====================================================================== */
-    /*  HELPER                                                                */
-    /* ====================================================================== */
-
-    /** Deduce lo step corrente (0–6) in base ai campi valorizzati. */
-    private int detectStep(ObjectNode fo) {
-        if (fo == null || fo.isEmpty())                                          return 0; // welcome
-
-        if (!hasNonEmpty(fo,"reporter","firstName")
-                || !hasNonEmpty(fo,"reporter","lastName"))                              return 1;
-
-        if (!hasNonEmpty(fo,"policyNumber")
-                || !hasNonEmpty(fo,"policyStatus"))                                     return 2;
-
-        if (!hasNonEmpty(fo,"incidentDate")
-                || !hasNonEmpty(fo,"incidentLocation")
-                || !hasNonEmpty(fo,"whatHappenedContext")
-                || !hasNonEmpty(fo,"whatHappenedCode"))                                 return 3;
-
-        if (!hasNonEmpty(fo,"damageDetails")
-                || !hasNonEmpty(fo,"circumstances","details"))                          return 4;
-
-        if (!fo.path("administrativeCheck").hasNonNull("passed"))                return 5;
-
-        return 6; // tutti i campi presenti
-    }
-
-    /** Verifica presenza di TUTTI i campi richiesti per lo STEP 6. */
-    private boolean allFieldsPresent(ObjectNode fo) {
-        return  hasNonEmpty(fo,"incidentDate")
-                && hasNonEmpty(fo,"policyNumber")
-                && hasNonEmpty(fo,"policyStatus")
-                && fo.path("administrativeCheck").hasNonNull("passed")
-                && hasNonEmpty(fo,"whatHappenedContext")
-                && hasNonEmpty(fo,"whatHappenedCode")
-
-                && hasNonEmpty(fo,"reporter","firstName")
-                && hasNonEmpty(fo,"reporter","lastName")
-                && hasNonEmpty(fo,"reporter","contacts","email")
-                && hasNonEmpty(fo,"reporter","contacts","mobile")
-
-                && hasNonEmpty(fo,"incidentLocation")
-
-                && hasNonEmpty(fo,"circumstances","details")
-                && fo.path("circumstances").has("notes")        // può essere null ma deve esistere
-
-                && hasNonEmpty(fo,"damageDetails")
-                && fo.has("imagesUploaded");                    // array – può essere vuoto
-    }
-
-    /** True se root.path(a).path(b)… è presente e non‑null. */
-    private boolean hasNonEmpty(ObjectNode root, String... path) {
-        if (root == null) return false;
-        ObjectNode node = root;
-        for (int i = 0; i < path.length - 1; i++) {
-            if (!node.has(path[i]) || !node.path(path[i]).isObject()) return false;
-            node = (ObjectNode) node.path(path[i]);
-        }
-        return node.hasNonNull(path[path.length - 1]);
-    }
 }

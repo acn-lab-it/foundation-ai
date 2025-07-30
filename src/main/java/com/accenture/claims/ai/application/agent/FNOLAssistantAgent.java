@@ -24,7 +24,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @OutputGuardrails({
         NonEmptyOutputGuard.class,
         NoProgressWithoutToolGuard.class,
-        //FinalOutputGuard.class
+        FinalOutputGuard.class
 })
 public interface FNOLAssistantAgent {
 
@@ -34,7 +34,6 @@ public interface FNOLAssistantAgent {
             DateParserTool.class,
             MediaOcrAgent.class,
             SpeechToTextAgent.class,
-            FinalOutputTool.class,
             SummaryTool.class,
             PolicyFinderTool.class,
             TechnicalCoverageTool.class,

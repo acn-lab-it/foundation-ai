@@ -1,7 +1,10 @@
 package com.accenture.claims.ai.application.tool;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -22,7 +25,10 @@ public class DateParserTool {
     @Inject ChatModel chatModel;
     @Inject SessionLanguageContext sessionLanguageContext;
     @Inject LanguageHelper languageHelper;
+    @Inject
+    FinalOutputJSONStore finalOutputJSONStore;
 
+    private static final ObjectMapper M = new ObjectMapper();
     private static final Pattern ISO_PATTERN =
             Pattern.compile("(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})Z?");
 
@@ -56,9 +62,15 @@ public class DateParserTool {
         if (!m.find()) {
             throw new IllegalArgumentException("LLM did not return ISO-8601: '" + answer + "'");
         }
-        System.out.println("=== DATE NORMALIZED ===");
-        System.out.println(m.group(1) + "Z");
-        System.out.println("=======================");
+
+        String iso = m.group(1) + "Z";
+
+        ObjectNode patch = M.createObjectNode().put("incidentDate", iso);
+        finalOutputJSONStore.put("final_output", sessionId, null, patch);
+
+        System.out.println("=== DATE NORMALIZED & SAVED ===");
+        System.out.println(iso);
+        System.out.println("================================");
         return m.group(1) + "Z";
     }
 }

@@ -6,16 +6,15 @@ import io.quarkiverse.langchain4j.guardrails.OutputGuardrailResult;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
-//@TODO - Verificare se forse dovrei passare un system message, così arriva come usermessage
 public class NonEmptyOutputGuard implements OutputGuardrail {
 
     @Override
     public OutputGuardrailResult validate(OutputGuardrailParams params) {
         var ai = params.responseFromLLM();
         // Se il modello ha richiesto l'esecuzione di tool, tutto ok
-        if (ai != null && ai.toolExecutionRequests() != null && !ai.toolExecutionRequests().isEmpty()) {
+        /*if (ai != null && ai.toolExecutionRequests() != null && !ai.toolExecutionRequests().isEmpty()) {
             return success();
-        }
+        }*/
 
         String text = (ai == null || ai.text() == null) ? "" : ai.text().trim();
 
