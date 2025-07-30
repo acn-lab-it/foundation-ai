@@ -49,6 +49,10 @@ public class NoProgressWithoutToolGuard implements OutputGuardrail {
         /* match “messaggio di attesa” */
         if (progressPattern.matcher(text).find()) {
 
+            if (text.contains("finalResult")) {
+                return success();
+            }
+
             String reprompt = languageHelper
                     .getPrompt(lang, "guardrails.progressReprompt")   // Optional<String>
                     .orElse("""
