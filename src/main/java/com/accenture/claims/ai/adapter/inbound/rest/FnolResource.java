@@ -126,6 +126,7 @@ public class FnolResource {
             raw = """
               {"answer":"Something went wrong. Try Again."}
             """;
+            return Response.serverError().build();
         }
 
         ChatResponseDto dto;
