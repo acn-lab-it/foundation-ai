@@ -20,7 +20,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @RegisterAiService
 @ApplicationScoped
 @SystemMessage("{{systemPrompt}}") // var. risolta via @V
-@InputGuardrails(PromptInjectionGuard.class)
+//@InputGuardrails(PromptInjectionGuard.class)
 @OutputGuardrails({
         NonEmptyOutputGuard.class,
         NoProgressWithoutToolGuard.class,
