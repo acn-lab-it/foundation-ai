@@ -2,76 +2,54 @@ package com.accenture.claims.ai.guardrails;
 
 import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.PolicySelectionFlagStore;
-import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import dev.langchain4j.data.message.AiMessage;
 import io.quarkiverse.langchain4j.guardrails.*;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * Blocca qualsiasi tool finché non è stata selezionata una polizza
- * Impone di chiamare <code>setSelectedPolicy</code> dopo la scelta.
- */
 @ApplicationScoped
 public class FinalOutputGuard implements OutputGuardrail {
 
     private static final Logger LOG = Logger.getLogger(FinalOutputGuard.class);
 
-    @Inject GuardrailsContext ctx;
-    @Inject
-    PolicySelectionFlagStore flagStore;
+    @Inject GuardrailsContext            ctx;
+    @Inject PolicySelectionFlagStore     flagStore;
+    @Inject SessionLanguageContext       sessionLanguageContext;
+    @Inject LanguageHelper               languageHelper;
 
     /* ────────────────────────────────────────────────────────── */
 
     @Override
     public OutputGuardrailResult validate(OutputGuardrailParams p) {
         String sessionId = ctx.getSessionId();
-        LOG.info("FinalOutputGuard checking response for session: " + sessionId);
-        LOG.info("Flag Pending Policy for session: " + flagStore.isPending(sessionId));
-        if (flagStore.isPending(sessionId)) {
+        LOG.infof("FinalOutputGuard – session %s  (pending=%s)",
+                sessionId, flagStore.isPending(sessionId));
 
-            AiMessage ai = p.responseFromLLM();
-            // permetti SOLO testo che termini con “?”
-            boolean justAQuestion =
-                    ai != null &&
-                            ai.text() != null &&
-                            ai.text().trim().endsWith("?");
+        /* se non c’è una scelta pendente, lascia passare */
+        if (!flagStore.isPending(sessionId)) return success();
 
-            if (justAQuestion) return success();
+        AiMessage ai = p.responseFromLLM();
+        boolean justAQuestion =
+                ai != null &&
+                        ai.text() != null &&
+                        ai.text().trim().endsWith("?");
 
-            return reprompt(
-                    "⚠️ ERRORE: Devi chiamare setSelectedPolicy prima di procedere allo STEP 3 ⚠️",
-                    """
-                    ⚠️ ISTRUZIONE OBBLIGATORIA ⚠️
-                    
-                    Hai già mostrato le polizze all'utente, ma NON hai chiamato il tool setSelectedPolicy.
-                    
-                    DEVI ASSOLUTAMENTE:
-                    1. Se l'utente non ha ancora scelto una polizza:
-                       - Chiedi all'utente di scegliere una polizza specifica
-                       - Attendi la risposta dell'utente
-                    
-                    2. DOPO che l'utente ha scelto o confermato una polizza:
-                       - Chiama IMMEDIATAMENTE il tool setSelectedPolicy con:
-                         * sessionId: lo stesso sessionId usato per retrievePolicy
-                         * policyNumber: il numero della polizza scelta dall'utente
-                    
-                    Esempio:
-                    setSelectedPolicy(sessionId, "MTRHHR00026398")
-                    
-                    NON puoi procedere allo STEP 3 senza prima chiamare questo tool.
-                    """
-            );
-        }
+        if (justAQuestion) return success();   // l’AI sta solo chiedendo quale polizza
 
-        /* Nessuna scelta pendente → tutto OK */
-        LOG.info("No pending policy selection for session: " + sessionId + " - allowing response");
-        return success();
+        /* ───────── reprompt localizzato ───────── */
+
+        String lang = sessionLanguageContext.getLanguage(sessionId); // fallback “en”
+        LanguageHelper.PromptResult pr =
+                languageHelper.getPromptWithLanguage(lang, "guardrails.finaloutputPrompt");
+
+        String repromptMsg = pr.prompt;  // se servono variabili, usa applyVariables
+
+        return reprompt(
+                "setSelectedPolicy mandatory",
+                repromptMsg
+        );
     }
-
 }

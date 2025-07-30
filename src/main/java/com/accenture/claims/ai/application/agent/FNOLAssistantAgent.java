@@ -24,7 +24,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 @OutputGuardrails({
         NonEmptyOutputGuard.class,
         NoProgressWithoutToolGuard.class,
-        FinalOutputGuard.class
+        //FinalOutputGuard.class
 })
 public interface FNOLAssistantAgent {
 
