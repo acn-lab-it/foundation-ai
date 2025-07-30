@@ -1,5 +1,6 @@
 package com.accenture.claims.ai.config;
 
+import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
@@ -28,6 +29,9 @@ public class TelegramBotLongPolling extends TelegramLongPollingBot {
 
     @Inject
     LanguageHelper languageHelper;
+    
+    @Inject
+    GuardrailsContext guardrailsContext;
 
     private static final Logger LOG = Logger.getLogger(TelegramBotLongPolling.class);
 
@@ -157,6 +161,10 @@ public class TelegramBotLongPolling extends TelegramLongPollingBot {
 
             // Set the language for the session
             sessionLanguageContext.setLanguage(sessionId, promptResult.language);
+
+            // Set the context for the guardrails
+            guardrailsContext.setSessionId(sessionId);
+            guardrailsContext.setSystemPrompt(systemPrompt);
 
             // Process the message with the agent
             LOG.info("Processing message with agent: " + userMessage);
