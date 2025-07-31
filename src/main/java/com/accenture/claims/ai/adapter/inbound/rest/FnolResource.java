@@ -218,8 +218,8 @@ public class FnolResource {
             }
           ],
           "circumstances": {
-            "details": "Incendio o altri eventi",
-            "notes": "Mentre il cliente stava cucinando, è scoppiato un incendio in cucina. L’evento è avvenuto il 27/07/2025 alle 14.30 e l’indirizzo è Linzer Str. 225, Vienna 1010"
+            "details": "Fire or other events",
+            "notes": "While the customer was cooking, a fire broke out in the kitchen. The incident occurred on 27 July 2025 at 2:30 p.m. at Linzer Str. 225, 1010 Vienna."
           },
           "damageDetails": "PROPERTY ‑ Kitchen (conf. 0.95)",
           "administrativeCheck": {
