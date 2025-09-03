@@ -50,147 +50,116 @@ public class EmailParserTool {
         return s != null && !s.trim().isEmpty();
     }
 
-    @Tool("""
-            Rispetto a questo testo che stai ricevendo in input ci sono tutte le informazioni per popolare un JSON.
-            Ritorna il JSON correttamente popolato.
-            
-            Di seguito la struttura del JSON
-                {
+    @Tool(
+        name = "parseEmail",
+        value = """
+        Task: Extract structured JSON data from input text
+        
+        You will receive an unstructured input (e.g., an email or free-form text) that contains all the necessary information to populate a JSON object.
+        
+        Your task is to:
+        
+        Extract the relevant data.
+        
+        Populate a single, valid JSON object using the schema provided below.
+        
+        Return only the final JSON in the output — no explanations or additional text.
+        
+        JSON Schema
+        {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "policyNumber": {
+              "type": "string",
+              "description": "Insurance policy number associated with the claim."
+            },
+            "reporter": {
+              "type": "object",
+              "required": ["firstName", "lastName", "contacts"],
+              "properties": {
+                "firstName": {
+                  "type": "string",
+                  "description": "First name of the reporter."
+                },
+                "lastName": {
+                  "type": "string",
+                  "description": "Last name of the reporter."
+                },
+                "contacts": {
                   "type": "object",
-                  "required": [
-                    "_id",
-                    "policyNumber",
-                    "policyStatus",
-                    "reporter",
-                    "incidentDate",
-                    "whatHappenedCode",
-                    "whatHappenedContext",
-                    "incidentLocation",
-                    "imagesUploaded",
-                    "circumstances",
-                    "damageDetails",
-                    "administrativeCheck"
-                  ],
+                  "required": ["email", "mobile"],
                   "properties": {
-                    "_id": {
+                    "email": {
                       "type": "string",
-                      "format": "uuid",
-                      "description": "Identificatore univoco della segnalazione (UUID)."
+                      "format": "email",
+                      "description": "Email address of the reporter."
                     },
-                    "policyNumber": {
+                    "mobile": {
                       "type": "string",
-                      "description": "Numero di polizza assicurativa associata al sinistro."
-                    },
-                    "policyStatus": {
-                      "type": "string",
-                      "enum": ["ACTIVE", "EXPIRED", "CANCELLED"],
-                      "description": "Stato corrente della polizza assicurativa."
-                    },
-                    "reporter": {
-                      "type": "object",
-                      "required": ["firstName", "lastName", "contacts"],
-                      "properties": {
-                        "firstName": {
-                          "type": "string",
-                          "description": "Nome del segnalante."
-                        },
-                        "lastName": {
-                          "type": "string",
-                          "description": "Cognome del segnalante."
-                        },
-                        "contacts": {
-                          "type": "object",
-                          "required": ["email", "mobile"],
-                          "properties": {
-                            "email": {
-                              "type": "string",
-                              "format": "email",
-                              "description": "Email del segnalante."
-                            },
-                            "mobile": {
-                              "type": "string",
-                              "description": "Numero di telefono cellulare del segnalante (in formato internazionale)."
-                            }
-                          }
-                        }
-                      }
-                    },
-                    "incidentDate": {
-                      "type": "string",
-                      "format": "date-time",
-                      "description": "Data e ora dell'incidente in formato ISO 8601 (es. 2025-11-10T14:00:00Z)."
-                    },
-                    "whatHappenedCode": {
-                      "type": "string",
-                      "description": "Codice dell'evento accaduto (es. 'FIR' per incendio)."
-                    },
-                    "whatHappenedContext": {
-                      "type": "string",
-                      "description": "Descrizione contestuale dell'evento accaduto."
-                    },
-                    "incidentLocation": {
-                      "type": "string",
-                      "description": "Indirizzo o luogo in cui è avvenuto l'incidente."
-                    },
-                    "imagesUploaded": {
-                      "type": "array",
-                      "description": "Elenco dei file multimediali caricati relativi all'incidente.",
-                      "items": {
-                        "type": "object",
-                        "required": ["mediaName", "mediaDescription", "mediaType"],
-                        "properties": {
-                          "mediaName": {
-                            "type": "string",
-                            "description": "Nome del file multimediale."
-                          },
-                          "mediaDescription": {
-                            "type": "string",
-                            "description": "Descrizione del contenuto del file."
-                          },
-                          "mediaType": {
-                            "type": "string",
-                            "enum": ["image", "video"],
-                            "description": "Tipo di media ('image' o 'video')."
-                          }
-                        }
-                      }
-                    },
-                    "circumstances": {
-                      "type": "object",
-                      "required": ["details", "notes"],
-                      "description": "Dettagli contestuali sulle circostanze dell'incidente.",
-                      "properties": {
-                        "details": {
-                          "type": "string",
-                          "description": "Categoria generale delle circostanze (es. incendio, allagamento)."
-                        },
-                        "notes": {
-                          "type": "string",
-                          "description": "Descrizione libera e dettagliata dell'accaduto."
-                        }
-                      }
-                    },
-                    "damageDetails": {
-                      "type": "string",
-                      "description": "Dettagli sui danni rilevati, con eventuale punteggio di confidenza."
-                    },
-                    "administrativeCheck": {
-                      "type": "object",
-                      "required": ["passed"],
-                      "description": "Esito del controllo amministrativo sulla segnalazione.",
-                      "properties": {
-                        "passed": {
-                          "type": "boolean",
-                          "description": "Esito del controllo (true = superato, false = non superato)."
-                        }
-                      }
+                      "description": "Mobile phone number of the reporter (international format)."
                     }
                   }
                 }
-            Output: un singolo JSON con la struttura finale.
-            Parametri: rawEmail
-            """)
-    public String emitSummary(
+              }
+            },
+            "incidentDate": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Date and time of the incident in ISO 8601 format (e.g., 2025-11-10T14:00:00Z)."
+            },
+            "incidentLocation": {
+              "type": "string",
+              "description": "Address or location where the incident occurred."
+            },
+            "circumstances": {
+              "type": "object",
+              "required": ["details", "notes"],
+              "description": "Contextual information about the circumstances of the incident.",
+              "properties": {
+                "details": {
+                  "type": "string",
+                  "description": "General category of the circumstances (e.g., fire, flood)."
+                },
+                "notes": {
+                  "type": "string",
+                  "description": "Freeform description providing more detail about the event."
+                }
+              }
+            },
+            "damageDetails": {
+              "type": "string",
+              "description": "Details about the detected damage, possibly including confidence score."
+            }
+          }
+        }
+        
+        
+        Guidelines
+        
+        Use ISO 8601 format for dates (incidentDate).
+        
+        For any field that is missing or unclear in the input, do not invent data — leave it out only if truly absent and not required.
+        
+        The output must be a single, syntactically valid JSON object, ready to be used by another system.
+        
+        All required fields must be filled in, if the data is present in the input.
+        
+        Example input (rawEmail):
+        
+        Hi, I’m Lukas Baumgartner. My house caught fire on November 10th at 2PM in Vienna, Linzer Str. Some walls are damaged. My insurance number is MTRHHR00026398. Please find attached a photo and a video of the incident. Contact: allianz@test.at
+        , +61456677674.
+        
+        Expected output format:
+        {
+          "policyNumber": "...",
+          ...
+        }
+        
+        
+        Input parameter: rawEmail
+""")
+    public String parseEmail(
             String sessionId,
             String rawEmail
     ) {
