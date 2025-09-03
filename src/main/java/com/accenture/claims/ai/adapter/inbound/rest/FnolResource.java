@@ -2,9 +2,13 @@ package com.accenture.claims.ai.adapter.inbound.rest;
 
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputStore;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.email.AttachmentDto;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
+import com.accenture.claims.ai.application.service.EmailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -37,6 +41,8 @@ public class FnolResource {
     GuardrailsContext guardrailsContext;
     @Inject
     FinalOutputJSONStore finalOutputJSONStore;
+    @Inject
+    EmailService emailService;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -111,6 +117,90 @@ public class FnolResource {
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"audio_upload_failure\"}")
+                        .build();
+            }
+        }
+
+        // Recupero la lingua e il main prompt del superagent (fallback su "en" se non gestiamo la lingua richiesta)
+        LanguageHelper.PromptResult promptResult =
+                languageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.mainPrompt");
+
+        // Inietto la sessionId corrente nel prompt per renderlo aware del vero sessionID (scopo: evitare confusioni nelle chiamate interne)
+        String systemPrompt = languageHelper.applyVariables(promptResult.prompt, Map.of("sessionId", sessionId));
+
+        // Imposto la lingua di sessione per i sotto-prompt e pro-futuro
+        sessionLanguageContext.setLanguage(sessionId, promptResult.language);
+
+        // Imposto il contesto per i guardrails
+        guardrailsContext.setSessionId(sessionId);
+        guardrailsContext.setSystemPrompt(systemPrompt);
+
+        String raw = agent.chat(sessionId, systemPrompt, userMessage);
+
+        System.out.println("=================== Agent Response =======================");
+        System.out.println("RAW: " + raw);
+        System.out.println("==========================================================\n");
+        if (raw == null || raw.trim().isEmpty() || "null".equalsIgnoreCase(raw.trim())) {
+            return Response.serverError().build();
+        }
+
+        ChatResponseDto dto;
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            var node = mapper.readTree(raw);
+            String answer = node.has("answer") ? node.get("answer").asText() : raw;
+            Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
+                    ? mapper.convertValue(node.get("finalResult"), Object.class)
+                    : null;
+            var fo = finalOutputJSONStore.get("final_output", sessionId);
+            System.out.println("========== CURRENT FINAL_OUTPUT ==========");
+            System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
+            System.out.println("==========================================\n");
+            dto = new ChatResponseDto(sessionId, answer, fo);
+        } catch (Exception ex) {
+            // Se il modello non segue lo schema, fallback
+            dto = new ChatResponseDto(sessionId, raw, null);
+        }
+
+        return Response.ok(dto).build();
+    }
+
+    @POST
+    @jakarta.ws.rs.Path("/parseEmail/{emailId}")
+    @jakarta.enterprise.context.control.ActivateRequestContext
+    public Response parseEmail(@PathParam("emailId") String emailId, @HeaderParam("Accept-Language") String acceptLanguage) throws Exception {
+
+        if (emailId == null || emailId.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\":\"emailId obbligatorio\"}").build();
+        }
+
+        // Genera UUID
+        String sessionId = UUID.randomUUID().toString();
+
+        // Recupero l'email
+        EmailDto email = emailService.findOne(emailId);
+        String userMessage = email.getText();
+
+        // Recupero gli allegati e salvo in directory temporanea
+        if (!email.getAttachments().isEmpty()) {
+            try {
+                Path tmpDir = Files.createTempDirectory("email-media-" + emailId);
+                List<String> paths = new ArrayList<>();
+                for (AttachmentDto att : email.getAttachments().values()) {
+                    DownloadedAttachment attachment = emailService.downloadAttachment(emailId, att.getFilename());
+
+                    Path dst = tmpDir.resolve(att.getFilename());
+                    Files.write(dst, attachment.getContent());
+
+                    paths.add(dst.toString());
+                }
+                userMessage += "\n\n[MEDIA_FILES]\n" +
+                        paths.stream().collect(Collectors.joining("\n")) +
+                        "\n[/MEDIA_FILES]";
+            } catch (IOException e) {
+                return Response.serverError()
+                        .entity("{\"error\":\"upload_failure\"}")
                         .build();
             }
         }
