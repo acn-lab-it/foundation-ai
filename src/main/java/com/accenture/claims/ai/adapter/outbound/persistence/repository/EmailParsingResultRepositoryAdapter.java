@@ -37,9 +37,13 @@ public class EmailParsingResultRepositoryAdapter implements EmailParsingResultRe
     }
 
     @Override
-    public void save(EmailParsingResult emailParsingResult) {
+    public void persist(EmailParsingResult emailParsingResult) {
         persist(emailParsingResultMapper.toEmailParsingResultEntity(emailParsingResult));
     }
 
+    @Override
+    public void update(EmailParsingResult emailParsingResult) {
+        update(emailParsingResultMapper.toEmailParsingResultEntity(emailParsingResult));
+    }
 
 }

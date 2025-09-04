@@ -11,6 +11,8 @@ public interface EmailParsingResultRepository {
 
     List<EmailParsingResult> getAll();
 
-    void save(EmailParsingResult emailParsingResult);
+    void persist(EmailParsingResult emailParsingResult);
+
+    void update(EmailParsingResult emailParsingResult);
 
 }
