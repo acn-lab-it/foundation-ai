@@ -53,111 +53,25 @@ public class EmailParserTool {
     @Tool(
         name = "parseEmail",
         value = """
-        Task: Extract structured JSON data from input text
+        Task: Extract structured JSON data from input text.
         
-        You will receive an unstructured input (e.g., an email or free-form text) that contains all the necessary information to populate a JSON object.
+        Guidelines:
+        - Output a single, valid JSON object.
+        - Use ISO 8601 for dates.
+        - If data is missing, leave fields absent unless required and present in input.
+        - Required fields: reporter.firstName, reporter.lastName, reporter.contacts.email, reporter.contacts.mobile when present in input.
+
+        Return only the JSON.
+
+        Fields:
+        - policyNumber: string
+        - reporter: { firstName, lastName, contacts { email, mobile } }
+        - incidentDate: string (ISO 8601)
+        - incidentLocation: string
+        - circumstances: { details, notes }
+        - damageDetails: string
         
-        Your task is to:
-        
-        Extract the relevant data.
-        
-        Populate a single, valid JSON object using the schema provided below.
-        
-        Return only the final JSON in the output — no explanations or additional text.
-        
-        JSON Schema
-        {
-          "type": "object",
-          "required": [],
-          "properties": {
-            "policyNumber": {
-              "type": "string",
-              "description": "Insurance policy number associated with the claim."
-            },
-            "reporter": {
-              "type": "object",
-              "required": ["firstName", "lastName", "contacts"],
-              "properties": {
-                "firstName": {
-                  "type": "string",
-                  "description": "First name of the reporter."
-                },
-                "lastName": {
-                  "type": "string",
-                  "description": "Last name of the reporter."
-                },
-                "contacts": {
-                  "type": "object",
-                  "required": ["email", "mobile"],
-                  "properties": {
-                    "email": {
-                      "type": "string",
-                      "format": "email",
-                      "description": "Email address of the reporter."
-                    },
-                    "mobile": {
-                      "type": "string",
-                      "description": "Mobile phone number of the reporter (international format)."
-                    }
-                  }
-                }
-              }
-            },
-            "incidentDate": {
-              "type": "string",
-              "format": "date-time",
-              "description": "Date and time of the incident in ISO 8601 format (e.g., 2025-11-10T14:00:00Z)."
-            },
-            "incidentLocation": {
-              "type": "string",
-              "description": "Address or location where the incident occurred."
-            },
-            "circumstances": {
-              "type": "object",
-              "required": ["details", "notes"],
-              "description": "Contextual information about the circumstances of the incident.",
-              "properties": {
-                "details": {
-                  "type": "string",
-                  "description": "General category of the circumstances (e.g., fire, flood)."
-                },
-                "notes": {
-                  "type": "string",
-                  "description": "Freeform description providing more detail about the event."
-                }
-              }
-            },
-            "damageDetails": {
-              "type": "string",
-              "description": "Details about the detected damage, possibly including confidence score."
-            }
-          }
-        }
-        
-        
-        Guidelines
-        
-        Use ISO 8601 format for dates (incidentDate).
-        
-        For any field that is missing or unclear in the input, do not invent data — leave it out only if truly absent and not required.
-        
-        The output must be a single, syntactically valid JSON object, ready to be used by another system.
-        
-        All required fields must be filled in, if the data is present in the input.
-        
-        Example input (rawEmail):
-        
-        Hi, I’m Lukas Baumgartner. My house caught fire on November 10th at 2PM in Vienna, Linzer Str. Some walls are damaged. My insurance number is MTRHHR00026398. Please find attached a photo and a video of the incident. Contact: allianz@test.at
-        , +61456677674.
-        
-        Expected output format:
-        {
-          "policyNumber": "...",
-          ...
-        }
-        
-        
-        Input parameter: rawEmail
+        Input parameter: sessionId, rawEmail
 """)
     public String parseEmail(
             String sessionId,

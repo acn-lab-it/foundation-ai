@@ -7,23 +7,14 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.chat.request.ResponseFormat;
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
-import dev.langchain4j.model.chat.request.json.JsonSchema;
-
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-
 import org.jboss.resteasy.reactive.RestForm;
+import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import java.util.List;
 import java.util.UUID;
@@ -52,6 +43,7 @@ public class EmailTestController {
     public static final class FnolEmailRequest {
         public String from;
         public String mailMessage;
+        public List<FileUpload> files;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -81,12 +73,14 @@ public class EmailTestController {
     public Response extractMultipart(
             @RestForm("from") String from,
             @RestForm("mailMessage") String mailMessage,
+       //     @RestForm("files") @PartType("application/octet-stream") List<FileUpload> files,
             @HeaderParam("Accept-Language") String acceptLanguage
 
     ) {
         FnolEmailRequest req = new FnolEmailRequest();
         req.from = from;
         req.mailMessage = mailMessage;
+        //req.files = files;
         return doExtract(req);
     }
 

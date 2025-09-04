@@ -1,13 +1,14 @@
 package com.accenture.claims.ai.adapter.inbound.rest;
 
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
-import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputStore;
+import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.AttachmentDto;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
+import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
+import com.accenture.claims.ai.application.agent.FNOLEmailAssistantAgent;
 import com.accenture.claims.ai.application.service.EmailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,8 +25,6 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
-
 @jakarta.ws.rs.Path("/fnol")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
@@ -33,6 +32,8 @@ public class FnolResource {
 
     @Inject
     FNOLAssistantAgent agent;
+    @Inject
+    FNOLEmailAssistantAgent emailAgent;
     @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
@@ -183,21 +184,38 @@ public class FnolResource {
         String userMessage = email.getText();
 
         // Recupero gli allegati e salvo in directory temporanea
-        if (!email.getAttachments().isEmpty()) {
+        if (email.getAttachments() != null && !email.getAttachments().isEmpty()) {
             try {
                 Path tmpDir = Files.createTempDirectory("email-media-" + emailId);
                 List<String> paths = new ArrayList<>();
                 for (AttachmentDto att : email.getAttachments().values()) {
-                    DownloadedAttachment attachment = emailService.downloadAttachment(emailId, att.getFilename());
 
+                    boolean isMedia = false;
+                    try {
+                        String ct = att.getContentType();
+                        isMedia = isMediaContentType(ct);
+                    } catch (Throwable ignore) {
+                        // nessun content-type disponibile su AttachmentDto
+                    }
+                    if (!isMedia) {
+                        isMedia = isMediaFileName(att.getFilename());
+                    }
+                    if (!isMedia) {
+                        // skip non-media
+                        continue;
+                    }
+
+                    DownloadedAttachment attachment = emailService.downloadAttachment(emailId, att.getFilename());
                     Path dst = tmpDir.resolve(att.getFilename());
                     Files.write(dst, attachment.getContent());
-
                     paths.add(dst.toString());
                 }
-                userMessage += "\n\n[MEDIA_FILES]\n" +
-                        paths.stream().collect(Collectors.joining("\n")) +
-                        "\n[/MEDIA_FILES]";
+
+                if (!paths.isEmpty()) {
+                    userMessage += "\n\n[MEDIA_FILES]\n" +
+                            String.join("\n", paths) +
+                            "\n[/MEDIA_FILES]";
+                }
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"upload_failure\"}")
@@ -207,7 +225,7 @@ public class FnolResource {
 
         // Recupero la lingua e il main prompt del superagent (fallback su "en" se non gestiamo la lingua richiesta)
         LanguageHelper.PromptResult promptResult =
-                languageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.mainPrompt");
+                languageHelper.getPromptWithLanguage(acceptLanguage, "emailAgent.mainPrompt");
 
         // Inietto la sessionId corrente nel prompt per renderlo aware del vero sessionID (scopo: evitare confusioni nelle chiamate interne)
         String systemPrompt = languageHelper.applyVariables(promptResult.prompt, Map.of("sessionId", sessionId));
@@ -219,7 +237,7 @@ public class FnolResource {
         guardrailsContext.setSessionId(sessionId);
         guardrailsContext.setSystemPrompt(systemPrompt);
 
-        String raw = agent.chat(sessionId, systemPrompt, userMessage);
+        String raw = emailAgent.chat(sessionId, systemPrompt, userMessage);
 
         System.out.println("=================== Agent Response =======================");
         System.out.println("RAW: " + raw);
@@ -281,6 +299,26 @@ public class FnolResource {
         fillMissing(complete, mock);
 
         return complete;
+    }
+
+    private static final Set<String> IMG_EXT = Set.of(
+            "jpg","jpeg","png","gif","bmp","webp","tif","tiff","heic","heif","svg"
+    );
+    private static final Set<String> VID_EXT = Set.of(
+            "mp4","mov","m4v","avi","mkv","webm","mpeg","mpg","3gp","3gpp","wmv"
+    );
+    private static boolean isMediaContentType(String ct) {
+        if (ct == null) return false;
+        String c = ct.toLowerCase(Locale.ITALY);
+        return c.startsWith("image/") || c.startsWith("video/");
+    }
+
+    private static boolean isMediaFileName(String fileName) {
+        if (fileName == null) return false;
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0 || dot == fileName.length() - 1) return false;
+        String ext = fileName.substring(dot + 1).toLowerCase(Locale.ITALY);
+        return IMG_EXT.contains(ext) || VID_EXT.contains(ext);
     }
 
     String mockJson = """
