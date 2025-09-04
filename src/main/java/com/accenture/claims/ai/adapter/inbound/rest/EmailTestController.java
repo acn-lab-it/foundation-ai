@@ -7,17 +7,24 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.jboss.resteasy.reactive.PartType;
 import org.jboss.resteasy.reactive.RestForm;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Path("/fnol/email")
 @ApplicationScoped
@@ -73,14 +80,14 @@ public class EmailTestController {
     public Response extractMultipart(
             @RestForm("from") String from,
             @RestForm("mailMessage") String mailMessage,
-       //     @RestForm("files") @PartType("application/octet-stream") List<FileUpload> files,
+            @RestForm("files") @PartType("application/octet-stream") List<FileUpload> files,
             @HeaderParam("Accept-Language") String acceptLanguage
 
     ) {
         FnolEmailRequest req = new FnolEmailRequest();
         req.from = from;
         req.mailMessage = mailMessage;
-        //req.files = files;
+        req.files = files;
         return doExtract(req);
     }
 
@@ -110,10 +117,60 @@ public class EmailTestController {
 
         String sessionId = UUID.randomUUID().toString();
 
-        String raw = agent.chat(sessionId, sys, user);
+        String rawEmailData = agent.chat(sessionId, sys, user);
+        
+        List<String> rawImageData = new ArrayList<>();
+        // Gestione eventuali file
+        if (req.files != null && !req.files.isEmpty()) {
+            try {
+                java.nio.file.Path tmpDir = Files.createTempDirectory("chat-media-");
+                for (FileUpload fu : req.files) {
+                    java.nio.file.Path dst = tmpDir.resolve(fu.fileName());
+                    Files.copy(fu.uploadedFile(), dst);
+                    String mediaUserMessage = """
+                    [MEDIA_FILES]
+                    %s
+                    [/MEDIA_FILES]
+                """.formatted(List.of(dst.toString()).stream().collect(Collectors.joining("\n")));
 
-        return Response.ok(raw).build();
+                    mediaUserMessage += "\n\n" + user;
 
+                    String sysMediaMessage = """
+                You MUST invoke the MediaOcrAgent.analyzeMedia tool.
+                Use the following parameters:
+                - sessionId: use the provided sessionId
+                - sources: an array like [{ "ref": "<path>" }]
+                - userText: the email message
+                
+                Output MUST be a single JSON object EXACTLY like provided by the tool.
+                If a field is missing/unknown/invalid, set it to null.
+                Do not invent values. Do not add/remove/rename fields. No comments. No code fences.
+                """;
+
+                    rawImageData.add(agent.chat(sessionId, sysMediaMessage, mediaUserMessage));
+
+                }
+
+            } catch (IOException e) {
+                return Response.serverError()
+                    .entity("{\"error\":\"upload_failure\"}")
+                    .build();
+            }
+        }
+
+        try {
+            ObjectNode emailJson = (ObjectNode) MAPPER.readTree(rawEmailData);
+            ArrayNode mediaArray = MAPPER.createArrayNode();
+            for (var rawImageDatum : rawImageData){
+                mediaArray.add(MAPPER.readTree(rawImageDatum));
+            }
+            ObjectNode raw = emailJson.set("attachments", mediaArray);
+            return Response.ok(raw).build();
+        } catch (IOException e) {
+            return Response.serverError()
+                    .entity("{\"error\":\"decode_failure\"}")
+                    .build();
+        }
 
     }
 

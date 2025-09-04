@@ -21,7 +21,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 public interface FNOLEmailAssistantAgent {
 
     @ToolBox({
-            EmailParserTool.class
+            EmailParserTool.class,
+            MediaOcrAgent.class
+
     })
     String chat(@MemoryId String sessionId,
                 @V("systemPrompt") String systemPrompt,

@@ -54,7 +54,7 @@ public class EmailParserTool {
         name = "parseEmail",
         value = """
         Task: Extract structured JSON data from input text.
-        
+
         Guidelines:
         - Output a single, valid JSON object.
         - Use ISO 8601 for dates.
