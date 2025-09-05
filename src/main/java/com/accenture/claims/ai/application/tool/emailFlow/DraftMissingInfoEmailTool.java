@@ -40,7 +40,9 @@ public class DraftMissingInfoEmailTool {
         String sys = """
             You are an insurance claims assistant. Write a courteous and professional email asking the customer
             to provide the missing First Notification of Loss (FNOL) details.
-            - Be concise and well-structured (subject + greeting + bullet list of missing items + closing).
+            - Do not put a subject, just the plain body.
+            - Do not insert placeholders like [you name], [your contact] and so on.
+            - Be concise and well-structured (greeting + bullet list of missing items + closing).
             - For each missing key, show a short, user-friendly description of WHAT to provide.
             - Keep the tone helpful and polite; avoid legal jargon.
             - If asked (flag provided), also request a brief description of accident dynamics (what happened).

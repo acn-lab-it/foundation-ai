@@ -1,5 +1,6 @@
 package com.accenture.claims.ai.application.agent.emailFlow;
 
+import com.accenture.claims.ai.application.tool.PolicyFinderTool;
 import com.accenture.claims.ai.application.tool.emailFlow.EmailWhatHappenedClassifierByPrompt;
 import com.accenture.claims.ai.application.tool.emailFlow.EmailParsingTool;
 import dev.langchain4j.service.MemoryId;
@@ -17,6 +18,7 @@ public interface FNOLEmailAssistantAgent {
 
     @ToolBox({
             EmailParsingTool.class,
+            PolicyFinderTool.class,
             EmailWhatHappenedClassifierByPrompt.class,
     })
     String chat(@MemoryId String sessionId,

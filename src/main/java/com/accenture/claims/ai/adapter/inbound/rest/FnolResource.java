@@ -302,12 +302,12 @@ public class FnolResource {
         try {
             ObjectMapper mapper = new ObjectMapper();
             var node = mapper.readTree(rawEmailData);
-            String answer = node.has("answer") ? node.get("answer").asText() : rawEmailData;
+            String answer = "";
             Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
                     ? mapper.convertValue(node.get("finalResult"), Object.class)
                     : null;
 
-            var fo = finalOutputJSONStore.get("final_output", sessionId);
+            var fo = finalOutputJSONStore.get("email_parsing_result", sessionId);
             System.out.println("========== CURRENT FINAL_OUTPUT ==========");
             System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
             System.out.println("==========================================\n");
@@ -393,11 +393,6 @@ public class FnolResource {
             current = finalOutputJSONStore.get("email_parsing_result", sessionId);
         }
 
-        System.out.println("========== CURRENT EMAIL_PARSING_RESULT ==========");
-        System.out.println(sessionId + " " + emailId);
-        System.out.println(current == null ? "<empty>" : current.toPrettyString());
-        System.out.println("==========================================\n");
-
         ObjectNode missing = M.createObjectNode();
 
         // campi obbligatori
@@ -415,11 +410,6 @@ public class FnolResource {
         boolean needMoreAccidentDetails = (missingWHC && missingWHCtx);
 
         // Se solo uno dei due manca, puoi decidere se chiedere quello specifico.
-        // Se vuoi *mai* chiedere il codice puntuale, commenta le due righe sotto.
-        if (!needMoreAccidentDetails) {
-            if (missingWHC)   missing.putNull("whatHappenedCode");
-            if (missingWHCtx) missing.putNull("whatHappenedContext");
-        }
 
         boolean hasMissing = missing.size() > 0 || needMoreAccidentDetails;
         if (!hasMissing) return Optional.empty();
@@ -428,6 +418,12 @@ public class FnolResource {
         if (recipientEmail == null || recipientEmail.isBlank()) recipientEmail = sender;
 
         String locale = sessionLanguageContext.getLanguage(sessionId);
+
+        System.out.println("========== CURRENT EMAIL_PARSING_RESULT ==========");
+        System.out.println(sessionId + " " + emailId);
+        System.out.println(current == null ? "<empty>" : current.toPrettyString());
+        System.out.println(missing.toPrettyString());
+        System.out.println("==========================================\n");
 
         // genera la mail
         String emailBody = draftMissingInfoEmailTool.draftMissingInfoEmail(
