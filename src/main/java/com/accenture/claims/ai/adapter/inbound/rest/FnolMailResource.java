@@ -67,6 +67,10 @@ public class FnolMailResource {
         String sessionId = UUID.randomUUID().toString();
 
         EmailDto email = emailService.findOne(emailId);
+        if (email == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+
         String userMessage = email.getText();
         String sender = extractEmailAddress(email.getFrom());
 
@@ -240,8 +244,8 @@ public class FnolMailResource {
         if (isBlank(current.path("incidentLocation"))) missing.putNull("incidentLocation");
 
         JsonNode reporter = current.path("reporter");
-        if (isBlank(reporter.path("name")))            missing.putNull("reporter.name");
-        if (isBlank(reporter.path("surname")))         missing.putNull("reporter.surname");
+        if (isBlank(reporter.path("firstName")))            missing.putNull("reporter.firstName");
+        if (isBlank(reporter.path("lastName")))         missing.putNull("reporter.lastName");
 
         // whatHappened*: se ENTRAMBI mancanti ⇒ NON chiederli puntualmente, ma solo la dinamica
         boolean missingWHC    = isBlank(current.path("whatHappenedCode"));

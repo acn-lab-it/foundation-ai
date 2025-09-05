@@ -53,8 +53,8 @@ public class EmailParsingTool {
                                             .addStringProperty("incidentLocation").description("Luogo del sinistro; null se assente.")
                                             .addProperty("reporter",
                                                     JsonObjectSchema.builder()
-                                                            .addStringProperty("name").description("Nome del reporter; null se assente.")
-                                                            .addStringProperty("surname").description("Cognome del reporter; null se assente.")
+                                                            .addStringProperty("firstName").description("Nome del reporter; null se assente.")
+                                                            .addStringProperty("lastName").description("Cognome del reporter; null se assente.")
                                                             .addProperty("contacts",
                                                                     JsonObjectSchema.builder()
                                                                             .addStringProperty("email").description("Email del Sender (from); null se assente o non valida.")
@@ -87,8 +87,8 @@ public class EmailParsingTool {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class Reporter {
-        public String name;
-        public String surname;
+        public String firstName;
+        public String lastName;
         public Contacts contacts;
     }
 
@@ -106,7 +106,7 @@ public class EmailParsingTool {
     @Tool(
             name = "email_parsing_tool",
             value = "Parse an FNOL email and return a strict JSON with { policyNumber, incidentDate (ISO-8601), " +
-                    "incidentLocation, reporter { name, surname, contacts { email, mobile } } }. " +
+                    "incidentLocation, reporter { firstName, lastName, contacts { email, mobile } } }. " +
                     "Parameters: sessionId, emailId, from, mailMessage. Returns: JSON string; missing/uncertain fields -> null."
     )
     public String email_parsing_tool(String sessionId, String emailId, String senderEmail, String mailMessage) {
@@ -132,8 +132,8 @@ public class EmailParsingTool {
               "incidentDate": string(ISO-8601)|null,
               "incidentLocation": string|null,
               "reporter": {
-                "name": string|null,
-                "surname": string|null,
+                "firstName": string|null,
+                "lastName": string|null,
                 "contacts": { "email": string|null, "mobile": string|null }
               }
             }
@@ -221,8 +221,8 @@ public class EmailParsingTool {
         o.incidentDate = null;
         o.incidentLocation = null;
         o.reporter = new Reporter();
-        o.reporter.name = null;
-        o.reporter.surname = null;
+        o.reporter.firstName = null;
+        o.reporter.lastName = null;
         o.reporter.contacts = new Contacts();
         o.reporter.contacts.email = null;
         o.reporter.contacts.mobile = null;
@@ -236,8 +236,8 @@ public class EmailParsingTool {
         if (isBlank(o.incidentLocation)) o.incidentLocation = null;
 
         if (o.reporter == null) o.reporter = new Reporter();
-        if (isBlank(o.reporter.name)) o.reporter.name = null;
-        if (isBlank(o.reporter.surname)) o.reporter.surname = null;
+        if (isBlank(o.reporter.firstName)) o.reporter.firstName = null;
+        if (isBlank(o.reporter.lastName)) o.reporter.lastName = null;
 
         if (o.reporter.contacts == null) o.reporter.contacts = new Contacts();
         if (isBlank(o.reporter.contacts.email)) o.reporter.contacts.email = null;
