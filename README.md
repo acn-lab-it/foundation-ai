@@ -365,3 +365,29 @@ mongodb://IL_TUO_USER:LA_TUA_PW@<NOME_HOST>:27017
 
 ⚠️ Se la password contiene caratteri speciali (`@`, `!`, `#`, ecc.),  
 - deve essere **percent-encodata** (es. `P@ss!word` → `P%40ss%21word`).
+
+
+## DB versioning and sync (MongoDB)
+
+We keep versioned collection snapshots and scripts under db/.
+- Collections JSON: db/collections/*.json
+- Init/Migrations: db/init/*.js (executed in order by seed.ps1)
+- Scripts (PowerShell):
+  - Export live DB to repo: db\scripts\export.ps1
+  - Import repo JSON into DB: db\scripts\import.ps1
+  - Apply init scripts: db\scripts\seed.ps1
+
+Defaults
+- Mongo URI: mongodb://localhost:27017 (override with env MONGO_URI)
+- Database name: read from src\main\resources\application.properties quarkus.mongodb.database or env MONGO_DB
+
+Examples (PowerShell)
+- .\db\scripts\export.ps1
+- .\db\scripts\import.ps1
+- .\db\scripts\seed.ps1
+
+Filter specific collections
+- Export only policy and prompts:
+  - .\db\scripts\export.ps1 -Collections policy,prompts
+- Import only prompts:
+  - .\db\scripts\import.ps1 -Collections prompts
