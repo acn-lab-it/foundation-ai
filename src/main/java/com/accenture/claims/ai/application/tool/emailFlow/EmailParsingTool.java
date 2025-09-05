@@ -4,6 +4,10 @@ import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONS
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.tool.DateParserTool;
+import com.accenture.claims.ai.domain.model.emailParsing.Contacts;
+import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
+import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
+import com.accenture.claims.ai.domain.repository.EmailParsingResultRepository;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +24,7 @@ import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.Email;
 
 import java.util.List;
 import java.util.Map;
@@ -32,9 +37,10 @@ public class EmailParsingTool {
     @Inject ChatModel chatModel;
     @Inject SessionLanguageContext sessionLanguageContext;
     @Inject LanguageHelper languageHelper;
-    @Inject FinalOutputJSONStore finalOutputJSONStore;
     @Inject
     DateParserTool dateParserTool;
+    @Inject
+    EmailParsingResultRepository emailParsingResultRepository;
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
@@ -72,35 +78,6 @@ public class EmailParsingTool {
             )
             .build();
 
-    /* ===== DTO ===== */
-
-    public static final class FnolEmailRequest {
-        public String from;
-        public String mailMessage;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static final class Contacts {
-        public String email;
-        public String mobile;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static final class Reporter {
-        public String firstName;
-        public String lastName;
-        public Contacts contacts;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static final class FnolEmailExtraction {
-        public String emailId;
-        public String policyNumber;
-        public String incidentDate;
-        public String incidentLocation;
-        public Reporter reporter;
-    }
-
     /* ===== TOOL METHOD ===== */
 
     @Tool(
@@ -113,8 +90,11 @@ public class EmailParsingTool {
         // Basic guard
         if ((senderEmail == null || senderEmail.isBlank()) && (mailMessage == null || mailMessage.isBlank())) {
             try {
-                FnolEmailExtraction empty = nulls();
-                storePartialResult(sessionId, emailId, empty);
+                EmailParsingResult empty = new EmailParsingResult();
+                empty.setEmailId(emailId);
+                empty.setSessionId(sessionId);
+
+                create(empty);
                 return MAPPER.writeValueAsString(empty);
             } catch (Exception e) {
                 return "{}";
@@ -174,19 +154,24 @@ public class EmailParsingTool {
             String raw = chatResponse.aiMessage().text();
             String json = extractFirstJsonObject(raw);
 
-            FnolEmailExtraction out = MAPPER.readValue(json, FnolEmailExtraction.class);
+            EmailParsingResult out = MAPPER.readValue(json, EmailParsingResult.class);
             sanitize(out, senderEmail);
-            postProcessIncidentDate(sessionId, mailMessage, out);
 
-            storePartialResult(sessionId, emailId, out);
+            out.setEmailId(emailId);
+            out.setSessionId(sessionId);
+
+            postProcessIncidentDate(sessionId, mailMessage, out);
+            create(out);
 
             return MAPPER.writeValueAsString(out);
 
         } catch (Exception e) {
             // Fallback: oggetto con tutti i campi a null + salvataggio
             try {
-                FnolEmailExtraction fallback = nulls();
-                storePartialResult(sessionId, emailId, fallback);
+                EmailParsingResult fallback = new EmailParsingResult();
+                fallback.setEmailId(emailId);
+                fallback.setSessionId(sessionId);
+
                 return MAPPER.writeValueAsString(fallback);
             } catch (Exception ex) {
                 return "{}";
@@ -198,66 +183,43 @@ public class EmailParsingTool {
 
     private static String safe(String s) { return s == null ? "" : s; }
 
-    private void storePartialResult(String sessionId, String emailId, FnolEmailExtraction data) {
-        if (finalOutputJSONStore == null || sessionId == null || sessionId.isBlank() || data == null) return;
-        try {
-            data.emailId = emailId;
-            ObjectNode patch = MAPPER.valueToTree(data);
+    private void create(EmailParsingResult data) {
+        emailParsingResultRepository.persist(data);
 
-            System.out.println("===================== PARTIAL RESULT ======================");
-            System.out.println(MAPPER.writeValueAsString(patch));
-            System.out.println("===================== END PARTIAL RESULT ======================");
-
-            finalOutputJSONStore.put("email_parsing_result", sessionId, null, patch);
-
-        } catch (Exception ignore) {
-            // non propagare errori di persistenza
-        }
+        System.out.println("===================== PARTIAL RESULT ======================");
+        System.out.println(data);
+        System.out.println("===================== END PARTIAL RESULT ======================");
     }
 
-    private static FnolEmailExtraction nulls() {
-        FnolEmailExtraction o = new FnolEmailExtraction();
-        o.policyNumber = null;
-        o.incidentDate = null;
-        o.incidentLocation = null;
-        o.reporter = new Reporter();
-        o.reporter.firstName = null;
-        o.reporter.lastName = null;
-        o.reporter.contacts = new Contacts();
-        o.reporter.contacts.email = null;
-        o.reporter.contacts.mobile = null;
-        return o;
-    }
-
-    private static void sanitize(FnolEmailExtraction o, String senderEmail) {
+    private static void sanitize(EmailParsingResult o, String senderEmail) {
         if (o == null) return;
-        if (isBlank(o.policyNumber)) o.policyNumber = null;
-        if (isBlank(o.incidentDate)) o.incidentDate = null;
-        if (isBlank(o.incidentLocation)) o.incidentLocation = null;
+        if (isBlank(o.getPolicyNumber())) o.setPolicyNumber(null);
+        if (isBlank(o.getIncidentDate())) o.setIncidentDate(null);
+        if (isBlank(o.getIncidentLocation())) o.setIncidentLocation(null);
 
-        if (o.reporter == null) o.reporter = new Reporter();
-        if (isBlank(o.reporter.firstName)) o.reporter.firstName = null;
-        if (isBlank(o.reporter.lastName)) o.reporter.lastName = null;
+        if (o.getReporter() == null) o.setReporter(new Reporter());
+        if (isBlank(o.getReporter().getFirstName())) o.getReporter().setFirstName(null);
+        if (isBlank(o.getReporter().getLastName())) o.getReporter().setLastName(null);
 
-        if (o.reporter.contacts == null) o.reporter.contacts = new Contacts();
-        if (isBlank(o.reporter.contacts.email)) o.reporter.contacts.email = null;
-        if (isBlank(o.reporter.contacts.mobile)) o.reporter.contacts.mobile = null;
-        if (o.reporter != null && o.reporter.contacts != null) {
-            if (isBlank(o.reporter.contacts.email)) {
+        if (o.getReporter().getContacts() == null) o.getReporter().setContacts(new Contacts());
+        if (isBlank(o.getReporter().getContacts().getEmail())) o.getReporter().getContacts().setEmail(null);
+        if (isBlank(o.getReporter().getContacts().getMobile())) o.getReporter().getContacts().setMobile(null);
+        if (o.getReporter() != null && o.getReporter().getContacts() != null) {
+            if (isBlank(o.getReporter().getContacts().getEmail())) {
                 if (senderEmail != null) {
-                    o.reporter.contacts.email = senderEmail;
+                    o.getReporter().getContacts().setEmail(senderEmail);
                 }
             }
         }
     }
 
-    private void postProcessIncidentDate(String sessionId, String mailMessage, FnolEmailExtraction out) {
+    private void postProcessIncidentDate(String sessionId, String mailMessage, EmailParsingResult out) {
         if (out == null) return;
-        if (isBlank(out.incidentDate) || !isIso8601Utc(out.incidentDate)) {
+        if (isBlank(out.getIncidentDate()) || !isIso8601Utc(out.getIncidentDate())) {
             try {
                 String iso = dateParserTool.normalize(sessionId, mailMessage);
                 if (iso != null && !iso.isBlank()) {
-                    out.incidentDate = iso;
+                    out.setIncidentDate(iso);
                 }
             } catch (Exception ignore) {
                 // resta a null

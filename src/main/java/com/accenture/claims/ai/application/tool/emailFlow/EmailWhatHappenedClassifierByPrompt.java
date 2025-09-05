@@ -1,9 +1,9 @@
 package com.accenture.claims.ai.application.tool.emailFlow;
 
-import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.outbound.persistence.model.WhatHappenedEntity;
 import com.accenture.claims.ai.adapter.outbound.persistence.repository.WhatHappenedRepositoryAdapter;
-import com.accenture.claims.ai.adapter.outbound.persistence.repository.whatHappened.*;
+import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
+import com.accenture.claims.ai.domain.repository.EmailParsingResultRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,51 +19,50 @@ import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
 @ApplicationScoped
 public class EmailWhatHappenedClassifierByPrompt {
 
-    @Inject ChatModel chatModel;
-    @Inject WhatHappenedRepositoryAdapter repo;
-    @Inject FinalOutputJSONStore finalOutputJSONStore;
+    @Inject
+    ChatModel chatModel;
+    @Inject
+    WhatHappenedRepositoryAdapter whatHappenedRepository;
+    @Inject
+    EmailParsingResultRepository emailParsingResultRepository;
 
     private static final ObjectMapper M = new ObjectMapper();
 
     @Tool("""
-          Classify a textual loss description and persist the result.
-          @param sessionId current chat session
-          @param emailId   current email id
-          @param userText  raw description from the agent
-          @param address   normalized/parsed incident location
-          @return JSON ONLY:
-                  { "whatHappenedCode": "...",
-                    "whatHappenedContext": "...",
-                    "claimClassGroup": "...",
-                    "confidence": 0-1 }
-          """)
+            Classify a textual loss description and persist the result.
+            @param sessionId current chat session
+            @param emailId   current email id
+            @param userText  raw description from the agent
+            @param address   normalized/parsed incident location
+            @return JSON ONLY:
+                    { "whatHappenedCode": "...",
+                      "whatHappenedContext": "...",
+                      "claimClassGroup": "...",
+                      "confidence": 0-1 }
+            """)
     public String email_what_happened_classifier_by_prompt(String sessionId, String emailId, String userText, String address) throws JsonProcessingException {
-        String json = classifyWhatHappened(userText);
-        ObjectNode result = (ObjectNode) M.readTree(json);
-
-        String code = textOrNull(result.get("whatHappenedCode"));
-        String ctx  = textOrNull(result.get("whatHappenedContext"));
-
-        ObjectNode patch = M.createObjectNode()
-                .put("incidentLocation",    address);
-
-        if (code == null) patch.putNull("whatHappenedCode");
-        else patch.put("whatHappenedCode", code);
-
-        if (ctx == null) patch.putNull("whatHappenedContext");
-        else patch.put("whatHappenedContext", ctx);
-
-        finalOutputJSONStore.put("final_output", sessionId, null, patch);
-
-        if (emailId != null && !emailId.isBlank()) {
-            finalOutputJSONStore.put("email_parsing_result", sessionId, emailId, null, patch);
+        Optional<EmailParsingResult> optOutput = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
+        if (optOutput.isEmpty()) {
+            //TODO: gestione errori
+            throw new RuntimeException("JSON NON PRESENTE");
         }
+        EmailParsingResult output = optOutput.get();
+
+        String json = classifyWhatHappened(userText);
+        ObjectNode whatHappenedResult = (ObjectNode) M.readTree(json);
+
+        output.setWhatHappenedCode(textOrNull(whatHappenedResult.get("whatHappenedCode")));
+        output.setWhatHappenedContext(textOrNull(whatHappenedResult.get("whatHappenedContext")));
+        output.setIncidentLocation(address);
+
+        emailParsingResultRepository.update(output);
 
         return json;
     }
@@ -73,7 +72,7 @@ public class EmailWhatHappenedClassifierByPrompt {
             return fallbackJson();
         }
 
-        List<WhatHappenedEntity> allCats = repo.listAll();
+        List<WhatHappenedEntity> allCats = whatHappenedRepository.listAll();
         if (allCats.isEmpty()) {
             log.warn("WhatHappened – nessuna categoria presente a DB!");
             return fallbackJson();
@@ -92,28 +91,28 @@ public class EmailWhatHappenedClassifierByPrompt {
                 .collect(Collectors.joining("\n"));
 
         SystemMessage sys = SystemMessage.from("""
-            Sei un classificatore assicurativo esperto.
-            Ogni stringa è strutturata come: "CODICE" = "DESCRIZIONE" [CLASSE_GRUPPO].
-            Scegli ESATTAMENTE uno dei codici nella lista seguente per whatHappenedCode.
-            Scegli ESATTAMENTE una delle descrizioni nella lista seguente per whatHappenedContext.
-            Se nessun codice è adatto, usa null. Se non riesci a definire un codice, allora anche whatHappenedContext deve essere null.
-            Rispondi esclusivamente con un JSON:
-            { "whatHappenedCode": <CODICE>,
-              "whatHappenedContext": <DESCRIZIONE>,
-              "claimClassGroup": <CLASSE_GRUPPO>,
-              "confidence": 0-1 }
-            Non aggiungere testo extra.
-        """);
+                    Sei un classificatore assicurativo esperto.
+                    Ogni stringa è strutturata come: "CODICE" = "DESCRIZIONE" [CLASSE_GRUPPO].
+                    Scegli ESATTAMENTE uno dei codici nella lista seguente per whatHappenedCode.
+                    Scegli ESATTAMENTE una delle descrizioni nella lista seguente per whatHappenedContext.
+                    Se nessun codice è adatto, usa null. Se non riesci a definire un codice, allora anche whatHappenedContext deve essere null.
+                    Rispondi esclusivamente con un JSON:
+                    { "whatHappenedCode": <CODICE>,
+                      "whatHappenedContext": <DESCRIZIONE>,
+                      "claimClassGroup": <CLASSE_GRUPPO>,
+                      "confidence": 0-1 }
+                    Non aggiungere testo extra.
+                """);
 
         UserMessage usr = UserMessage.from("""
-            <DESCRIZIONE_SINISTRO>
-            %s
-            </DESCRIZIONE_SINISTRO>
-
-            <CATEGORIE>
-            %s
-            </CATEGORIE>
-        """.formatted(userText.trim(), catalog));
+                    <DESCRIZIONE_SINISTRO>
+                    %s
+                    </DESCRIZIONE_SINISTRO>
+                
+                    <CATEGORIE>
+                    %s
+                    </CATEGORIE>
+                """.formatted(userText.trim(), catalog));
 
         ChatResponse resp = chatModel.chat(
                 ChatRequest.builder()
@@ -149,9 +148,9 @@ public class EmailWhatHappenedClassifierByPrompt {
 
     private static String fallbackJson() {
         return """
-               { "whatHappenedCode": null,
-                 "whatHappenedContext": null,
-                 "claimClassGroup": null,
-                 "confidence":0.0 }""";
+                { "whatHappenedCode": null,
+                  "whatHappenedContext": null,
+                  "claimClassGroup": null,
+                  "confidence":0.0 }""";
     }
 }

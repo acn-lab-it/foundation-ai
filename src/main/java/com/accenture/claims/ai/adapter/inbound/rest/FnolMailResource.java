@@ -10,6 +10,9 @@ import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
 import com.accenture.claims.ai.application.service.EmailService;
 import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
+import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
+import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
+import com.accenture.claims.ai.domain.repository.EmailParsingResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -17,6 +20,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.lang.StringUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -43,7 +47,7 @@ public class FnolMailResource {
     @Inject
     GuardrailsContext guardrailsContext;
     @Inject
-    FinalOutputJSONStore finalOutputJSONStore;
+    EmailParsingResultRepository   emailParsingResultRepository;
 
     private static final ObjectMapper M = new ObjectMapper();
     private static final Set<String> IMG_EXT = Set.of(
@@ -181,9 +185,9 @@ public class FnolMailResource {
                     ? mapper.convertValue(node.get("finalResult"), Object.class)
                     : null;
 
-            var fo = finalOutputJSONStore.get("email_parsing_result", sessionId);
+            var fo = emailParsingResultRepository.findBySessionId(sessionId);
             System.out.println("========== CURRENT FINAL_OUTPUT ==========");
-            System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
+            System.out.println(fo == null ? "<empty>" : fo.toString());
             System.out.println("==========================================\n");
 
             dto = new FnolResource.ChatResponseDto(sessionId, answer, fo);
@@ -229,27 +233,36 @@ public class FnolMailResource {
 
     private Optional<FnolResource.MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender) throws Exception {
         // 1) tenta per (sessionId,emailId)
-        ObjectNode current = finalOutputJSONStore.get("email_parsing_result", sessionId, emailId);
-
-        // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
-        if (current == null || current.isEmpty()) {
-            current = finalOutputJSONStore.get("email_parsing_result", sessionId);
+        Optional<EmailParsingResult> optCurrent = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
+        if (optCurrent.isEmpty()) {
+            // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
+            //FIXME: ci serve davvero? non possiamo trovare direttamente per session id?
+            optCurrent = emailParsingResultRepository.findBySessionId(sessionId);
+            if (optCurrent.isEmpty()) {
+                throw new RuntimeException("JSON NON PRESENTE");
+            }
         }
+        EmailParsingResult current = optCurrent.get();
 
         ObjectNode missing = M.createObjectNode();
 
         // campi obbligatori
-        if (isBlank(current.path("policyNumber")))     missing.putNull("policyNumber");
-        if (isBlank(current.path("incidentDate")))     missing.putNull("incidentDate");
-        if (isBlank(current.path("incidentLocation"))) missing.putNull("incidentLocation");
+        if (StringUtils.isBlank(current.getPolicyNumber()))     missing.putNull("policyNumber");
+        if (StringUtils.isBlank(current.getIncidentDate()))      missing.putNull("incidentDate");
+        if (StringUtils.isBlank(current.getIncidentLocation()))  missing.putNull("incidentLocation");
 
-        JsonNode reporter = current.path("reporter");
-        if (isBlank(reporter.path("firstName")))            missing.putNull("reporter.firstName");
-        if (isBlank(reporter.path("lastName")))         missing.putNull("reporter.lastName");
+        Reporter reporter = current.getReporter();
+        if (reporter == null) {
+            missing.putNull("reporter.firstName");
+            missing.putNull("reporter.lastName");
+        } else {
+            if (StringUtils.isBlank(reporter.getFirstName()))  missing.putNull("reporter.firstName");
+            if (StringUtils.isBlank(reporter.getLastName()))  missing.putNull("reporter.LastName");
+        }
 
         // whatHappened*: se ENTRAMBI mancanti ⇒ NON chiederli puntualmente, ma solo la dinamica
-        boolean missingWHC    = isBlank(current.path("whatHappenedCode"));
-        boolean missingWHCtx  = isBlank(current.path("whatHappenedContext"));
+        boolean missingWHC    = StringUtils.isBlank(current.getWhatHappenedCode());
+        boolean missingWHCtx  = StringUtils.isBlank(current.getWhatHappenedContext());
         boolean needMoreAccidentDetails = (missingWHC && missingWHCtx);
 
         // Se solo uno dei due manca, puoi decidere se chiedere quello specifico.
@@ -257,14 +270,17 @@ public class FnolMailResource {
         boolean hasMissing = missing.size() > 0 || needMoreAccidentDetails;
         if (!hasMissing) return Optional.empty();
 
-        String recipientEmail = current.path("reporter").path("contacts").path("email").asText(null);
+        String recipientEmail = null;
+        if (reporter != null && reporter.getContacts() != null && !StringUtils.isBlank(reporter.getContacts().getEmail())) {
+            recipientEmail = reporter.getContacts().getEmail();
+        }
         if (recipientEmail == null || recipientEmail.isBlank()) recipientEmail = sender;
 
         String locale = sessionLanguageContext.getLanguage(sessionId);
 
         System.out.println("========== CURRENT EMAIL_PARSING_RESULT ==========");
         System.out.println(sessionId + " " + emailId);
-        System.out.println(current == null ? "<empty>" : current.toPrettyString());
+        System.out.println(current == null ? "<empty>" : current.toString());
         System.out.println(missing.toPrettyString());
         System.out.println("==========================================\n");
 
@@ -281,7 +297,7 @@ public class FnolMailResource {
         return Optional.of(new FnolResource.MissingResponseDto(
                 sessionId,
                 emailBody,
-                current.deepCopy()
+                current
         ));
     }
 

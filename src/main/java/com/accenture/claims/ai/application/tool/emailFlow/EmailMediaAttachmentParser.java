@@ -4,6 +4,10 @@ import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONS
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ImageSource;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
+import com.accenture.claims.ai.domain.model.damage.Circumstances;
+import com.accenture.claims.ai.domain.model.damage.Media;
+import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
+import com.accenture.claims.ai.domain.repository.EmailParsingResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -32,7 +36,7 @@ public class EmailMediaAttachmentParser {
 
     @Inject SessionLanguageContext sessionLanguageContext;
     @Inject LanguageHelper languageHelper;
-    @Inject FinalOutputJSONStore finalOutputJSONStore;
+    @Inject EmailParsingResultRepository   emailParsingResultRepository;
 
     private final ChatModel visionModel;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -81,6 +85,12 @@ public class EmailMediaAttachmentParser {
 
     public String runOcr(String sessionId, String emailId, List<ImageSource> sources, String userText)
             throws IOException, InterruptedException {
+        Optional<EmailParsingResult> optOutput = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
+        if (optOutput.isEmpty()) {
+            //TODO: gestione errori
+            throw new RuntimeException("JSON NON PRESENTE");
+        }
+        EmailParsingResult output = optOutput.get();
 
         List<Image> images = new ArrayList<>();
         int budgetLeft = MAX_TOTAL_IMAGES;
@@ -115,33 +125,31 @@ public class EmailMediaAttachmentParser {
         String json = extractJsonBlock(raw).orElse(DEFAULT_JSON_FALLBACK);
 
         try {
-            JsonNode result = mapper.readTree(json);
+            JsonNode ocrResult = mapper.readTree(json);
 
             // ====== (A) Aggiorna FINAL_OUTPUT (logica invariata) ======
-            ArrayNode imagesArr = mapper.createArrayNode();
+            output.setUploadedMedia(new ArrayList<>());
             for (ImageSource s : sources) {
-                ObjectNode m  = mapper.createObjectNode();
-                m.put("mediaName", Path.of(s.getRef()).getFileName().toString());
-                String descr = result.path("damageCategory").asText("UNKNOWN")
+                Media m = new Media();
+                m.setMediaName(Path.of(s.getRef()).getFileName().toString());
+                String descr = ocrResult.path("damageCategory").asText("UNKNOWN")
                         + " - "
-                        + result.path("damagedEntity").asText("UNKNOWN");
-                m.put("mediaDescription", descr);
-                m.put("mediaType", isVideo(Path.of(s.getRef())) ? "video" : "image");
-                imagesArr.add(m);
+                        + ocrResult.path("damagedEntity").asText("UNKNOWN");
+                m.setMediaDescription(descr);
+                m.setMediaType(isVideo(Path.of(s.getRef())) ? "video" : "image");
+                output.getUploadedMedia().add(m);
             }
 
-            ObjectNode patch = mapper.createObjectNode();
-            patch.set("imagesUploaded", imagesArr);
+            Circumstances circumstances = new Circumstances();
 
-            ObjectNode circumstances = mapper.createObjectNode();
-            circumstances.put("details", result.path("eventType").asText("UNKNOWN"));
-            circumstances.put("notes", safe(userText));
-            patch.set("circumstances", circumstances);
+            circumstances.setDetails(ocrResult.path("eventType").asText("UNKNOWN"));
+            circumstances.setNotes(safe(userText));
 
-            patch.put("damageDetails", descrFromResult(result));
+            output.setCircumstances(circumstances);
+            output.setDamageDetails(descrFromResult(ocrResult));
 
-            finalOutputJSONStore.put("email_parsing_result", sessionId, emailId,null, patch);
-            return mapper.writeValueAsString(patch);
+            emailParsingResultRepository.update(output);
+            return mapper.writeValueAsString(output);
         } catch (Exception ex) {
             ex.printStackTrace();
         }

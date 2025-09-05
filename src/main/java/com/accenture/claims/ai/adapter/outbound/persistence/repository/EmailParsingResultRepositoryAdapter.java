@@ -23,11 +23,18 @@ public class EmailParsingResultRepositoryAdapter implements EmailParsingResultRe
         this.emailParsingResultMapper = emailParsingResultMapper;
     }
 
-
     public Optional<EmailParsingResult> findByEmailId(String emailId) {
         return find("emailId = ?1", emailId).firstResultOptional().map(emailParsingResultMapper::toEmailParsingResult);
     }
 
+    public Optional<EmailParsingResult> findBySessionId(String sessionId) {
+        return find("sessionId = ?1", sessionId).firstResultOptional().map(emailParsingResultMapper::toEmailParsingResult);
+    }
+
+    public Optional<EmailParsingResult> findByEmailIdAndSessionId(String emailId, String sessionId) {
+        return find("emailId = ?1 and sessionId = ?2", emailId, sessionId).firstResultOptional().map(emailParsingResultMapper::toEmailParsingResult);
+    }
+    
     @Override
     public List<EmailParsingResult> getAll() {
         return findAll()
@@ -45,5 +52,11 @@ public class EmailParsingResultRepositoryAdapter implements EmailParsingResultRe
     public void update(EmailParsingResult emailParsingResult) {
         update(emailParsingResultMapper.toEmailParsingResultEntity(emailParsingResult));
     }
+
+    @Override
+    public void persistOrUpdate(EmailParsingResult emailParsingResult) {
+        persistOrUpdate(emailParsingResultMapper.toEmailParsingResultEntity(emailParsingResult));
+    }
+
 
 }
