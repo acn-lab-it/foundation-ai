@@ -2,7 +2,7 @@ package com.accenture.claims.ai.adapter.inbound.rest;
 
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
-import com.accenture.claims.ai.application.agent.FNOLEmailAssistantAgent;
+import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;

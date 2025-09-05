@@ -1,4 +1,4 @@
-package com.accenture.claims.ai.application.tool;
+package com.accenture.claims.ai.application.tool.emailFlow;
 
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;

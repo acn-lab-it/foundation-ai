@@ -7,9 +7,11 @@ import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachme
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
+import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
-import com.accenture.claims.ai.application.agent.FNOLEmailAssistantAgent;
+import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
 import com.accenture.claims.ai.application.service.EmailService;
+import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -35,6 +37,10 @@ public class FnolResource {
     @Inject
     FNOLEmailAssistantAgent emailAgent;
     @Inject
+    EmailMediaAgent mediaAgent;
+    @Inject
+    DraftMissingInfoEmailTool draftMissingInfoEmailTool;
+    @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
     LanguageHelper languageHelper;
@@ -55,6 +61,17 @@ public class FnolResource {
         public ChatResponseDto(String sessionId, String answer, Object finalResult) {
             this.sessionId = sessionId;
             this.answer = answer;
+            this.finalResult = finalResult;
+        }
+    }
+
+    public static class MissingResponseDto {
+        public String sessionId;
+        public String emailBody;
+        public Object finalResult;
+        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
+            this.sessionId = sessionId;
+            this.emailBody = emailBody;
             this.finalResult = finalResult;
         }
     }
@@ -169,53 +186,45 @@ public class FnolResource {
     @POST
     @jakarta.ws.rs.Path("/parseEmail/{emailId}")
     @jakarta.enterprise.context.control.ActivateRequestContext
-    public Response parseEmail(@PathParam("emailId") String emailId, @HeaderParam("Accept-Language") String acceptLanguage) throws Exception {
+    public Response parseEmail(@PathParam("emailId") String emailId,
+                               @HeaderParam("Accept-Language") String acceptLanguage) throws Exception {
 
         if (emailId == null || emailId.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("{\"error\":\"emailId obbligatorio\"}").build();
         }
 
-        // Genera UUID
         String sessionId = UUID.randomUUID().toString();
 
-        // Recupero l'email
         EmailDto email = emailService.findOne(emailId);
         String userMessage = email.getText();
+        String sender = extractEmailAddress(email.getFrom());
 
-        // Recupero gli allegati e salvo in directory temporanea
+        List<String> mediaPaths = new ArrayList<>();
+
         if (email.getAttachments() != null && !email.getAttachments().isEmpty()) {
             try {
                 Path tmpDir = Files.createTempDirectory("email-media-" + emailId);
-                List<String> paths = new ArrayList<>();
                 for (AttachmentDto att : email.getAttachments().values()) {
 
                     boolean isMedia = false;
                     try {
                         String ct = att.getContentType();
                         isMedia = isMediaContentType(ct);
-                    } catch (Throwable ignore) {
-                        // nessun content-type disponibile su AttachmentDto
-                    }
+                    } catch (Throwable ignore) { }
                     if (!isMedia) {
                         isMedia = isMediaFileName(att.getFilename());
                     }
                     if (!isMedia) {
-                        // skip non-media
                         continue;
                     }
 
                     DownloadedAttachment attachment = emailService.downloadAttachment(emailId, att.getFilename());
                     Path dst = tmpDir.resolve(att.getFilename());
                     Files.write(dst, attachment.getContent());
-                    paths.add(dst.toString());
+                    mediaPaths.add(dst.toString());
                 }
 
-                if (!paths.isEmpty()) {
-                    userMessage += "\n\n[MEDIA_FILES]\n" +
-                            String.join("\n", paths) +
-                            "\n[/MEDIA_FILES]";
-                }
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"upload_failure\"}")
@@ -223,49 +232,94 @@ public class FnolResource {
             }
         }
 
-        // Recupero la lingua e il main prompt del superagent (fallback su "en" se non gestiamo la lingua richiesta)
-        LanguageHelper.PromptResult promptResult =
+        LanguageHelper.PromptResult emailPromptResult =
                 languageHelper.getPromptWithLanguage(acceptLanguage, "emailAgent.mainPrompt");
 
-        // Inietto la sessionId corrente nel prompt per renderlo aware del vero sessionID (scopo: evitare confusioni nelle chiamate interne)
-        String systemPrompt = languageHelper.applyVariables(promptResult.prompt, Map.of("sessionId", sessionId));
+        String emailSystemPrompt = languageHelper.applyVariables(
+                emailPromptResult.prompt,
+                Map.of(
+                        "sessionId", sessionId,
+                        "emailId", emailId,
+                        "emailSender", sender,
+                        "currentDate", new Date().toString()
+                )
+        );
 
-        // Imposto la lingua di sessione per i sotto-prompt e pro-futuro
-        sessionLanguageContext.setLanguage(sessionId, promptResult.language);
-
-        // Imposto il contesto per i guardrails
+        sessionLanguageContext.setLanguage(sessionId, emailPromptResult.language);
         guardrailsContext.setSessionId(sessionId);
-        guardrailsContext.setSystemPrompt(systemPrompt);
+        guardrailsContext.setSystemPrompt(emailSystemPrompt);
 
-        String raw = emailAgent.chat(sessionId, systemPrompt, userMessage);
+        String rawEmailData = emailAgent.chat(sessionId, emailSystemPrompt, userMessage);
 
-        System.out.println("=================== Agent Response =======================");
-        System.out.println("RAW: " + raw);
-        System.out.println("==========================================================\n");
-        if (raw == null || raw.trim().isEmpty() || "null".equalsIgnoreCase(raw.trim())) {
-            return Response.serverError().build();
+        Optional<MissingResponseDto> maybeMissing = computeMissingPayload(sessionId, emailId, sender);
+        if (maybeMissing.isPresent()) {
+            System.out.println("=================== MISSING INFO AGENT Response =======================");
+            System.out.println("RAW: " + maybeMissing.get().emailBody);
+            System.out.println("FinalResult: " + maybeMissing.get().finalResult);
+            return Response.status(422).entity(maybeMissing.get()).build();
+        }
+
+        // ===== Invocazione MEDIA AGENT se ci sono media =====
+        if (!mediaPaths.isEmpty()) {
+            userMessage += "\n\n[MEDIA_FILES]\n" + String.join("\n", mediaPaths) + "\n[/MEDIA_FILES]";
+            LanguageHelper.PromptResult mediaPromptResult =
+                    languageHelper.getPromptWithLanguage(acceptLanguage, "emailAgent.mediaAgent");
+
+            String mediaSystemPrompt = languageHelper.applyVariables(
+                    mediaPromptResult.prompt,
+                    Map.of(
+                            "sessionId", sessionId,
+                            "emailId", emailId,
+                            "currentDate", new Date().toString()
+                    )
+            );
+
+            // Costruisco un user message minimale per il media agent: BODY + blocco MEDIA_FILES
+            String mediaUserMessage = """
+                BODY:
+                --------------------
+                %s
+
+                [MEDIA_FILES]
+                %s
+                [/MEDIA_FILES]
+                --------------------
+                """.formatted(userMessage, String.join("\n", mediaPaths));
+
+            // Allineo lingua e guardrails anche per il secondo agent (stessa sessione)
+            sessionLanguageContext.setLanguage(sessionId, mediaPromptResult.language);
+            guardrailsContext.setSessionId(sessionId);
+            guardrailsContext.setSystemPrompt(mediaSystemPrompt);
+
+            String rawMedia = mediaAgent.chat(sessionId, mediaSystemPrompt, mediaUserMessage);
+
+            System.out.println("=================== Media Agent Response =======================");
+            System.out.println("RAW: " + rawMedia);
+            System.out.println("================================================================\n");
         }
 
         ChatResponseDto dto;
         try {
             ObjectMapper mapper = new ObjectMapper();
-            var node = mapper.readTree(raw);
-            String answer = node.has("answer") ? node.get("answer").asText() : raw;
+            var node = mapper.readTree(rawEmailData);
+            String answer = node.has("answer") ? node.get("answer").asText() : rawEmailData;
             Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
                     ? mapper.convertValue(node.get("finalResult"), Object.class)
                     : null;
+
             var fo = finalOutputJSONStore.get("final_output", sessionId);
             System.out.println("========== CURRENT FINAL_OUTPUT ==========");
             System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
             System.out.println("==========================================\n");
+
             dto = new ChatResponseDto(sessionId, answer, fo);
         } catch (Exception ex) {
-            // Se il modello non segue lo schema, fallback
-            dto = new ChatResponseDto(sessionId, raw, null);
+            dto = new ChatResponseDto(sessionId, rawEmailData, null);
         }
 
         return Response.ok(dto).build();
     }
+
 
     /** merge ricorsivo “in avanti”: copia SOLO i campi mancanti */
     private static void fillMissing(ObjectNode target, ObjectNode defaults) {
@@ -301,6 +355,15 @@ public class FnolResource {
         return complete;
     }
 
+    private static String extractEmailAddress(String from) {
+        if (from == null) return null;
+        // prova match di un indirizzo email
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(from);
+        return m.find() ? m.group() : from; // se non trova, restituisci l'originale
+    }
+
     private static final Set<String> IMG_EXT = Set.of(
             "jpg","jpeg","png","gif","bmp","webp","tif","tiff","heic","heif","svg"
     );
@@ -319,6 +382,75 @@ public class FnolResource {
         if (dot < 0 || dot == fileName.length() - 1) return false;
         String ext = fileName.substring(dot + 1).toLowerCase(Locale.ITALY);
         return IMG_EXT.contains(ext) || VID_EXT.contains(ext);
+    }
+
+    private Optional<MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender) throws Exception {
+        // 1) tenta per (sessionId,emailId)
+        ObjectNode current = finalOutputJSONStore.get("email_parsing_result", sessionId, emailId);
+
+        // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
+        if (current == null || current.isEmpty()) {
+            current = finalOutputJSONStore.get("email_parsing_result", sessionId);
+        }
+
+        System.out.println("========== CURRENT EMAIL_PARSING_RESULT ==========");
+        System.out.println(sessionId + " " + emailId);
+        System.out.println(current == null ? "<empty>" : current.toPrettyString());
+        System.out.println("==========================================\n");
+
+        ObjectNode missing = M.createObjectNode();
+
+        // campi obbligatori
+        if (isBlank(current.path("policyNumber")))     missing.putNull("policyNumber");
+        if (isBlank(current.path("incidentDate")))     missing.putNull("incidentDate");
+        if (isBlank(current.path("incidentLocation"))) missing.putNull("incidentLocation");
+
+        JsonNode reporter = current.path("reporter");
+        if (isBlank(reporter.path("name")))            missing.putNull("reporter.name");
+        if (isBlank(reporter.path("surname")))         missing.putNull("reporter.surname");
+
+        // whatHappened*: se ENTRAMBI mancanti ⇒ NON chiederli puntualmente, ma solo la dinamica
+        boolean missingWHC    = isBlank(current.path("whatHappenedCode"));
+        boolean missingWHCtx  = isBlank(current.path("whatHappenedContext"));
+        boolean needMoreAccidentDetails = (missingWHC && missingWHCtx);
+
+        // Se solo uno dei due manca, puoi decidere se chiedere quello specifico.
+        // Se vuoi *mai* chiedere il codice puntuale, commenta le due righe sotto.
+        if (!needMoreAccidentDetails) {
+            if (missingWHC)   missing.putNull("whatHappenedCode");
+            if (missingWHCtx) missing.putNull("whatHappenedContext");
+        }
+
+        boolean hasMissing = missing.size() > 0 || needMoreAccidentDetails;
+        if (!hasMissing) return Optional.empty();
+
+        String recipientEmail = current.path("reporter").path("contacts").path("email").asText(null);
+        if (recipientEmail == null || recipientEmail.isBlank()) recipientEmail = sender;
+
+        String locale = sessionLanguageContext.getLanguage(sessionId);
+
+        // genera la mail
+        String emailBody = draftMissingInfoEmailTool.draftMissingInfoEmail(
+                sessionId,
+                emailId,
+                recipientEmail,
+                missing.toString(),
+                needMoreAccidentDetails,
+                locale
+        );
+
+        return Optional.of(new MissingResponseDto(
+                sessionId,
+                emailBody,
+                current.deepCopy()
+        ));
+    }
+
+    // utility
+    private static boolean isBlank(JsonNode n) {
+        if (n == null || n.isMissingNode() || n.isNull()) return true;
+        if (n.isTextual()) return n.asText().trim().isEmpty();
+        return false;
     }
 
     String mockJson = """

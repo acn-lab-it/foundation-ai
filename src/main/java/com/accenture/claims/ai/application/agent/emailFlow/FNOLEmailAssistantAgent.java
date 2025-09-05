@@ -1,6 +1,7 @@
-package com.accenture.claims.ai.application.agent;
+package com.accenture.claims.ai.application.agent.emailFlow;
 
-import com.accenture.claims.ai.application.tool.EmailParserTool;
+import com.accenture.claims.ai.application.tool.emailFlow.EmailWhatHappenedClassifierByPrompt;
+import com.accenture.claims.ai.application.tool.emailFlow.EmailParsingTool;
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
@@ -12,16 +13,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 @RegisterAiService
 @ApplicationScoped
 @SystemMessage("{{systemPrompt}}") // var. risolta via @V
-//@InputGuardrails(PromptInjectionGuard.class)
-/*@OutputGuardrails({
-        NonEmptyOutputGuard.class,
-        NoProgressWithoutToolGuard.class,
-        //FinalOutputGuard.class
-})*/
 public interface FNOLEmailAssistantAgent {
 
     @ToolBox({
-            EmailParserTool.class
+            EmailParsingTool.class,
+            EmailWhatHappenedClassifierByPrompt.class,
     })
     String chat(@MemoryId String sessionId,
                 @V("systemPrompt") String systemPrompt,
