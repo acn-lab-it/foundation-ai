@@ -27,7 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-@jakarta.ws.rs.Path("/fnol")
+@jakarta.ws.rs.Path("/api/fnol")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
 public class FnolMailResource {
