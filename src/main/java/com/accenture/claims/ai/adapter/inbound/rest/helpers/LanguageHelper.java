@@ -40,6 +40,7 @@ public class LanguageHelper {
     }
 
     public PromptResult getPromptWithLanguage(String acceptLanguageHeader, String keyPath) {
+        if(acceptLanguageHeader == null || acceptLanguageHeader.isBlank()) acceptLanguageHeader = FALLBACK_LANG;
         List<String> candidates = parseAcceptLanguage(acceptLanguageHeader);
         if (candidates.stream().noneMatch(l -> l.equalsIgnoreCase(FALLBACK_LANG))) {
             candidates.add(FALLBACK_LANG);
