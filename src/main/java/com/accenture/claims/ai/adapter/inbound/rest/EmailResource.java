@@ -1,10 +1,10 @@
 package com.accenture.claims.ai.adapter.inbound.rest;
 
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
-import com.accenture.claims.ai.application.service.EmailService;
 import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
 import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
 import com.accenture.claims.ai.domain.repository.EmailParsingResultRepository;
+import com.accenture.claims.ai.port.EmailService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
