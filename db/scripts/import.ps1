@@ -4,76 +4,40 @@ param(
   [string[]]$Collections
 )
 
-if (-not $MongoUri) {
-  $MongoUri = "mongodb://localhost:27017"
+# Wrapper: call the Bash script via WSL
+$wsl = (Get-Command wsl -ErrorAction SilentlyContinue)
+if (-not $wsl) {
+  Write-Error "WSL not found. Please install Windows Subsystem for Linux and ensure 'wsl' is in PATH. Alternatively run db/scripts/import.sh directly in a Linux shell."
+  exit 1
 }
 
-if (-not $DbName) {
-  $appProps = "src\main\resources\application.properties"
-  if (Test-Path $appProps) {
-    $line = Select-String -Path $appProps -Pattern "^quarkus.mongodb.database=" | Select-Object -First 1
-    if ($line) { $DbName = $line -replace ".*=", "" }
-  }
-  if (-not $DbName) { $DbName = "local_db" }
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$bashScriptWin = Join-Path $scriptDir "import.sh"
+if (-not (Test-Path $bashScriptWin)) {
+  Write-Error "Bash script not found: $bashScriptWin"
+  exit 1
+}
+$bashScriptWinEsc = $bashScriptWin -replace "\\","/"
+$bashScriptWsl = (wsl wslpath -a "$bashScriptWinEsc").Trim()
+
+$collArgs = @()
+if ($Collections -and $Collections.Count -gt 0) { 
+  $collArgs = $Collections 
+  if ($collArgs.Count -eq 1 -and $collArgs[0] -like "*,*") { $collArgs = $collArgs[0].Split(',') }
 }
 
-# Determine collections to import
-if ($Collections -and $Collections.Count -gt 0) {
-  $collections = $Collections
-} else {
-  $collections = Get-ChildItem -Path "db\collections" -Filter *.json | ForEach-Object { $_.BaseName }
-}
+$envArgs = @()
+if ($MongoUri) { $envArgs += ("MONGO_URI='" + $MongoUri + "'") }
+if ($DbName)   { $envArgs += ("MONGO_DB='"  + $DbName   + "'") }
 
-# Opzione di parsing per EJSON.parse: true (relaxed) in linea con export; impostare a $false per canonico
-$relaxed = $true
-$relaxedJs = $relaxed.ToString().ToLower()
-
-foreach ($coll in $collections) {
-  $file = Join-Path "db\collections" ("$coll.json")
-  if (Test-Path $file) {
-    Write-Host "Importing into $DbName.$coll from $file ..."
-    # Prepara contenuto del file come Base64 per evitare problemi di quoting/size
-    $rawContent = Get-Content -LiteralPath $file -Raw -Encoding UTF8
-    if ([string]::IsNullOrWhiteSpace($rawContent)) {
-      Write-Warning "Empty file for collection '$coll': $file. Skipping."
-      continue
-    }
-    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($rawContent))
-    $collJs = ($coll -replace "'", "\\'")
-    $b64Js = ($b64 -replace "'", "\\'")
-    $dbJs  = ($DbName -replace "'", "\\'")
-    # Crea file JS temporaneo per evitare limite lunghezza riga di comando
-    $tmpJsPath = [System.IO.Path]::ChangeExtension([System.IO.Path]::GetTempFileName(), ".js")
-    $jsCode = @"
-const c = '$collJs';
-const raw = Buffer.from('$b64Js','base64').toString('utf8');
-db = db.getSiblingDB('$dbJs');
-db.getCollection(c).drop();
-let docs;
-try {
-  docs = EJSON.parse(raw, { relaxed: $relaxedJs });
-} catch (e) {
-  print('Failed to parse EJSON for collection ' + c + ': ' + e);
-  quit(1);
-}
-if (!Array.isArray(docs)) {
-  print('Input is not a JSON array for collection ' + c);
-  quit(1);
-}
-if (docs.length > 0) {
-  db.getCollection(c).insertMany(docs, { ordered: false });
-  print('Inserted ' + docs.length + ' docs into ' + c);
-} else {
-  print('No documents to insert for ' + c);
-}
+$joinedEnv = ($envArgs -join ' ')
+$joinedCols = ($collArgs -join ' ')
+if ($joinedEnv) { $joinedEnv = "env $joinedEnv " }
+$bashCmd = @"
+$joinedEnv'$bashScriptWsl' $joinedCols
 "@
-    Set-Content -LiteralPath $tmpJsPath -Value $jsCode -Encoding UTF8
-    try {
-      mongosh --quiet --file "$tmpJsPath" "$MongoUri/$DbName" | Write-Output
-    } finally {
-      Remove-Item -LiteralPath $tmpJsPath -ErrorAction SilentlyContinue
-    }
-  } else {
-    Write-Warning "File not found for collection '$coll': $file. Skipping."
-  }
-}
+
+Write-Host ("[INFO] PowerShell version: {0}" -f $PSVersionTable.PSVersion)
+
+$bashCmd = $bashCmd -replace "`r", ""
+wsl bash -lc "$bashCmd"
