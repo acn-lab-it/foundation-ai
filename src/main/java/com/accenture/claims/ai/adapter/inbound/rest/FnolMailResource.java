@@ -7,6 +7,8 @@ import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
+import com.accenture.claims.ai.application.tool.DateParserTool;
+import com.accenture.claims.ai.application.tool.emailFlow.AddressVerificationTool;
 import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
 import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
 import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
@@ -39,6 +41,8 @@ public class FnolMailResource {
     @Inject
     DraftMissingInfoEmailTool draftMissingInfoEmailTool;
     @Inject
+    AddressVerificationTool addressVerificationTool;
+    @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
     LanguageHelper languageHelper;
@@ -54,6 +58,8 @@ public class FnolMailResource {
     private static final Set<String> VID_EXT = Set.of(
             "mp4","mov","m4v","avi","mkv","webm","mpeg","mpg","3gp","3gpp","wmv"
     );
+    @Inject
+    DateParserTool dateParserTool;
 
     /**
      * Parses and processes an email based on its unique identifier. The method analyzes the email's content,
@@ -139,7 +145,7 @@ public class FnolMailResource {
 
         String rawEmailData = emailAgent.chat(sessionId, emailSystemPrompt, userMessage);
 
-        Optional<FnolResource.MissingResponseDto> maybeMissing = computeMissingPayload(sessionId, emailId, sender);
+        Optional<MissingResponseDto> maybeMissing = computeMissingPayload(sessionId, emailId, sender, email.getText());
         if (maybeMissing.isPresent()) {
             System.out.println("=================== MISSING INFO AGENT Response =======================");
             System.out.println("RAW: " + maybeMissing.get().emailBody);
@@ -230,7 +236,7 @@ public class FnolMailResource {
         return IMG_EXT.contains(ext) || VID_EXT.contains(ext);
     }
 
-    private Optional<FnolResource.MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender) throws Exception {
+    private Optional<MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender, String userEmailBody) throws Exception {
         // 1) tenta per (sessionId,emailId)
         Optional<EmailParsingResult> optCurrent = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
         if (optCurrent.isEmpty()) {
@@ -249,6 +255,12 @@ public class FnolMailResource {
         if (StringUtils.isBlank(current.getPolicyNumber()))     missing.putNull("policyNumber");
         if (StringUtils.isBlank(current.getIncidentDate()))      missing.putNull("incidentDate");
         if (StringUtils.isBlank(current.getIncidentLocation()))  missing.putNull("incidentLocation");
+
+        if(!isCityPresent(sessionId, current.getIncidentLocation())) missing.putNull("incidentLocation.city");
+        if(!isStreetNameAndNumberPresent(sessionId, current.getIncidentLocation())) missing.putNull("incidentLocation.streetNameAndNumber");
+        if(!isDatePresent(sessionId, userEmailBody)) missing.putNull("incidentDate.completeDate");
+        if(!isTimePresent(sessionId, userEmailBody)) missing.putNull("incidentDate.completeTime");
+
 
         Reporter reporter = current.getReporter();
         if (reporter == null) {
@@ -293,11 +305,40 @@ public class FnolMailResource {
                 locale
         );
 
-        return Optional.of(new FnolResource.MissingResponseDto(
+        return Optional.of(new MissingResponseDto(
                 sessionId,
                 emailBody,
                 current
         ));
     }
+
+    private boolean isCityPresent(String sessionId, String incidentLocation) {
+        return addressVerificationTool.city_verification_tool(sessionId, incidentLocation);
+    }
+
+    private boolean isStreetNameAndNumberPresent(String sessionId, String incidentLocation) {
+        return addressVerificationTool.address_verification_tool(sessionId, incidentLocation);
+    }
+
+    private boolean isDatePresent(String sessionId, String userEmailBody){
+        return dateParserTool.canCalculateDate(sessionId, userEmailBody);
+    }
+
+    private boolean isTimePresent(String sessionId, String userEmailBody){
+        return dateParserTool.canCalculateTime(sessionId, userEmailBody);
+    }
+
+
+    public static class MissingResponseDto {
+        public String sessionId;
+        public String emailBody;
+        public Object finalResult;
+        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
+            this.sessionId = sessionId;
+            this.emailBody = emailBody;
+            this.finalResult = finalResult;
+        }
+    }
+    
 
 }

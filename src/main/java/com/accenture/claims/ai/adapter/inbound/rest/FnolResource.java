@@ -53,17 +53,6 @@ public class FnolResource {
         }
     }
 
-    public static class MissingResponseDto {
-        public String sessionId;
-        public String emailBody;
-        public Object finalResult;
-        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
-            this.sessionId = sessionId;
-            this.emailBody = emailBody;
-            this.finalResult = finalResult;
-        }
-    }
-
     @POST
     @jakarta.ws.rs.Path("/chat")
     @jakarta.enterprise.context.control.ActivateRequestContext
