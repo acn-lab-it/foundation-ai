@@ -395,3 +395,30 @@ Filter specific collections
   - .\db\scripts\export.ps1 -Collections policy,prompts
 - Import only prompts:
   - .\db\scripts\import.ps1 -Collections prompts
+
+
+## Rigenerare le classi MapStruct (EmailParsingResultMapperImpl)
+
+Se modifichi i DTO/Entity o l'interfaccia del mapper (es. EmailParsingResultMapper), l'implementazione generata da MapStruct (es. EmailParsingResultMapperImpl) viene rigenerata automaticamente durante la compilazione.
+
+Come forzare la rigenerazione:
+- Da terminale (consigliato):
+  - Windows: `mvnw.cmd clean compile -DskipTests`
+  - Linux/Mac: `./mvnw clean compile -DskipTests`
+- In Quarkus dev mode: lancia `mvnw quarkus:dev` e salva i file: Quarkus ricompila e rigenera i mapper al volo.
+
+Requisiti già presenti in questo progetto:
+- dipendenze `org.mapstruct:mapstruct` e `org.mapstruct:mapstruct-processor`
+- configurazione di annotation processing nel `maven-compiler-plugin`
+- `componentModel = "cdi"` nei mapper per l'integrazione con Quarkus/Arc
+
+Dove trovare le classi generate:
+- `target/generated-sources/annotations/.../EmailParsingResultMapperImpl.java`
+
+Se la classe non si rigenera:
+- Assicurati che il build compili senza errori; MapStruct genera le classi solo se la compilazione va a buon fine.
+- Controlla i warning di MapStruct su proprietà non mappate e aggiungi mapping espliciti o ignora se volontario.
+- Verifica che l'IDE abbia abilitato l'Annotation Processing (IntelliJ: Settings → Build Tools → Maven/Gradle e Compiler → Annotation Processors → Enable).
+
+Esempio di warning atteso durante la compilazione (non blocca il build):
+- Unmapped target property: "contacts" in `Reporter`. Aggiungi un mapping, oppure ignora se non necessario.

@@ -12,6 +12,8 @@ public interface EmailParsingResultRepository {
 
     Optional<EmailParsingResult> findBySessionId(String sessionId);
 
+    List<EmailParsingResult> findAllByEmailId(String emailId);
+
     Optional<EmailParsingResult> findByEmailIdAndSessionId(String emailId, String sessionId);
 
     // ---------

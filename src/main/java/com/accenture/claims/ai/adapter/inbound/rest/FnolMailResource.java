@@ -8,7 +8,7 @@ import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageConte
 import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
 import com.accenture.claims.ai.application.tool.DateParserTool;
-import com.accenture.claims.ai.application.tool.emailFlow.AddressVerificationTool;
+import com.accenture.claims.ai.application.tool.emailFlow.AddressTool;
 import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
 import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
 import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
@@ -41,7 +41,7 @@ public class FnolMailResource {
     @Inject
     DraftMissingInfoEmailTool draftMissingInfoEmailTool;
     @Inject
-    AddressVerificationTool addressVerificationTool;
+    AddressTool addressTool;
     @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
@@ -91,8 +91,11 @@ public class FnolMailResource {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
-        String userMessage = email.getText();
         String sender = extractEmailAddress(email.getFrom());
+        String userMessage = String.format("""
+                FROM: %s
+                BODY: %s
+                """, email.getFrom(), email.getText());
 
         List<String> mediaPaths = new ArrayList<>();
 
@@ -152,6 +155,8 @@ public class FnolMailResource {
             System.out.println("FinalResult: " + maybeMissing.get().finalResult);
             return Response.status(422).entity(maybeMissing.get()).build();
         }
+
+        extractFormatAndSaveAddress(emailId, sessionId);
 
         // ===== Invocazione MEDIA AGENT se ci sono media =====
         if (!mediaPaths.isEmpty()) {
@@ -214,6 +219,13 @@ public class FnolMailResource {
         return Response.ok(dto).build();
     }
 
+    private void extractFormatAndSaveAddress(String emailId, String sessionId) {
+        EmailParsingResult current = getEmailParsingResult(sessionId, emailId);
+        String formattedAddress = addressTool.formatAddress(sessionId, current.getIncidentLocation());
+        current.setFormattedAddress(formattedAddress);
+        emailParsingResultRepository.update(current);
+    }
+
     private static String extractEmailAddress(String from) {
         if (from == null) return null;
         // prova match di un indirizzo email
@@ -238,16 +250,7 @@ public class FnolMailResource {
 
     private Optional<MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender, String userEmailBody) throws Exception {
         // 1) tenta per (sessionId,emailId)
-        Optional<EmailParsingResult> optCurrent = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
-        if (optCurrent.isEmpty()) {
-            // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
-            //FIXME: ci serve davvero? non possiamo trovare direttamente per session id?
-            optCurrent = emailParsingResultRepository.findBySessionId(sessionId);
-            if (optCurrent.isEmpty()) {
-                throw new RuntimeException("JSON NON PRESENTE");
-            }
-        }
-        EmailParsingResult current = optCurrent.get();
+        EmailParsingResult current = getEmailParsingResult(sessionId, emailId);
 
         ObjectNode missing = M.createObjectNode();
 
@@ -312,12 +315,33 @@ public class FnolMailResource {
         ));
     }
 
+    private EmailParsingResult getEmailParsingResult(String sessionId, String emailId) {
+        Optional<EmailParsingResult> optCurrent = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
+        if (optCurrent.isEmpty()) {
+            // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
+            //FIXME: ci serve davvero? non possiamo trovare direttamente per session id?
+            optCurrent = emailParsingResultRepository.findBySessionId(sessionId);
+
+        }
+        if(optCurrent.isEmpty()) {
+            List<EmailParsingResult> allByEmailId = emailParsingResultRepository.findAllByEmailId(emailId);
+            if(!allByEmailId.isEmpty()) {
+                optCurrent = Optional.of(allByEmailId.getLast());
+            }
+        }
+        if (optCurrent.isEmpty()) {
+            throw new RuntimeException("JSON NON PRESENTE");
+        }
+        EmailParsingResult current = optCurrent.get();
+        return current;
+    }
+
     private boolean isCityPresent(String sessionId, String incidentLocation) {
-        return addressVerificationTool.city_verification_tool(sessionId, incidentLocation);
+        return addressTool.city_verification_tool(sessionId, incidentLocation);
     }
 
     private boolean isStreetNameAndNumberPresent(String sessionId, String incidentLocation) {
-        return addressVerificationTool.address_verification_tool(sessionId, incidentLocation);
+        return addressTool.address_verification_tool(sessionId, incidentLocation);
     }
 
     private boolean isDatePresent(String sessionId, String userEmailBody){
