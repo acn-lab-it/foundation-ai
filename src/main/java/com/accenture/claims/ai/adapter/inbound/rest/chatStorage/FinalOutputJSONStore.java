@@ -13,8 +13,6 @@ import lombok.NonNull;
 import org.bson.Document;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import java.util.Arrays;
-
 @ApplicationScoped
 public class FinalOutputJSONStore {
 
@@ -24,36 +22,26 @@ public class FinalOutputJSONStore {
     @ConfigProperty(name = "quarkus.mongodb.database", defaultValue = "local_db")
     String dbName;
 
-    /** Recupera (o crea vuoto) oggetto per quella sessione. */
     public ObjectNode get(@NonNull String collection, @NonNull String sessionId) {
         MongoCollection<Document> coll = mongo.getDatabase(dbName).getCollection(collection);
         Document doc = coll.find(Filters.eq("_id", sessionId)).first();
         if (doc == null) {
-            return mapper.createObjectNode();        // non esiste ancora
+            return mapper.createObjectNode();
         }
-        doc.remove("_id");                           // pulizia
+        doc.remove("_id");
         return (ObjectNode) mapper.convertValue(doc, JsonNode.class);
     }
 
-    /**
-     * Fa un merge “profondo” in path (dot‑notation). Se il documento non esiste
-     * lo crea; se il path è <code>null</code> merge a livello root.
-     */
     public void put(@NonNull String collection,
                     @NonNull String sessionId,
                     String path,
                     @NonNull ObjectNode patch) {
 
-        // 1. documento corrente (vuoto se non esiste)
         ObjectNode target = get(collection, sessionId);
 
-        /* ───── root‑level patch ───────────────────────────── */
         if (path == null || path.isBlank()) {
-            // Svuota l’oggetto e copia tutti i campi del patch alla radice
             deepMerge(target, patch);
-        }
-        /* ───── patch annidato ─────────────────────────────── */
-        else {
+        } else {
             ObjectNode node = target;
             String[] parts = path.split("\\.");
             for (int i = 0; i < parts.length; i++) {
@@ -64,7 +52,6 @@ public class FinalOutputJSONStore {
                 if (i < parts.length - 1) {
                     node = (ObjectNode) node.get(p);
                 } else {
-                    // ultimo segmento → merge sul nodo finale
                     deepMerge((ObjectNode) node.get(p), patch);
                 }
             }
@@ -79,10 +66,65 @@ public class FinalOutputJSONStore {
         coll.replaceOne(Filters.eq("_id", sessionId), toSave, new ReplaceOptions().upsert(true));
     }
 
-    /* ───── helpers ─────────────────────────────────────────────── */
+    public ObjectNode get(@NonNull String collection,
+                          @NonNull String sessionId,
+                          @NonNull String emailId) {
+        MongoCollection<Document> coll = mongo.getDatabase(dbName).getCollection(collection);
+        Document doc = coll.find(Filters.and(
+                Filters.eq("_id", sessionId),
+                Filters.eq("emailId", emailId)
+        )).first();
+        if (doc == null) {
+            return mapper.createObjectNode();
+        }
+        doc.remove("_id");
+        doc.remove("emailId");
+        return (ObjectNode) mapper.convertValue(doc, JsonNode.class);
+    }
 
+    public void put(@NonNull String collection,
+                    @NonNull String sessionId,
+                    @NonNull String emailId,
+                    String path,
+                    @NonNull ObjectNode patch) {
 
-    /** Deep‑merge ricorsivo (patch ↦ target) */
+        ObjectNode target = get(collection, sessionId, emailId);
+
+        if (path == null || path.isBlank()) {
+            deepMerge(target, patch);
+        } else {
+            ObjectNode node = target;
+            String[] parts = path.split("\\.");
+            for (int i = 0; i < parts.length; i++) {
+                String p = parts[i];
+                if (!node.has(p) || !node.get(p).isObject()) {
+                    node.set(p, mapper.createObjectNode());
+                }
+                if (i < parts.length - 1) {
+                    node = (ObjectNode) node.get(p);
+                } else {
+                    deepMerge((ObjectNode) node.get(p), patch);
+                }
+            }
+        }
+
+        System.out.println("======================= SAVING (with emailId) ==========================");
+        System.out.println(target == null ? "<empty>" : target.toPrettyString());
+        System.out.println("=======================================================================");
+
+        Document toSave = Document.parse(target.toString())
+                .append("_id", sessionId)
+                .append("emailId", emailId);
+
+        MongoCollection<Document> coll = mongo.getDatabase(dbName).getCollection(collection);
+        coll.replaceOne(
+                Filters.and(Filters.eq("_id", sessionId), Filters.eq("emailId", emailId)),
+                toSave,
+                new ReplaceOptions().upsert(true)
+        );
+    }
+
+    /** Deep-merge ricorsivo (patch ↦ target) */
     private void deepMerge(ObjectNode target, ObjectNode patch) {
         patch.fields().forEachRemaining(e -> {
             String key = e.getKey();
@@ -94,6 +136,4 @@ public class FinalOutputJSONStore {
             }
         });
     }
-
-
 }
