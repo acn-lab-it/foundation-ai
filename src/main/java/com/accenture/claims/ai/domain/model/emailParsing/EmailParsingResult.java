@@ -34,6 +34,8 @@ public class EmailParsingResult {
 
     private Map<String, Object> otherFields = new HashMap<>();
 
+    private String formattedAddress; //TODO proper object, not a stringified json
+
     @JsonAnyGetter
     public Map<String, Object> getOtherFields() {
         return otherFields;

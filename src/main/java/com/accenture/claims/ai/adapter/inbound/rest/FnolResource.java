@@ -2,16 +2,9 @@ package com.accenture.claims.ai.adapter.inbound.rest;
 
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.email.AttachmentDto;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
-import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
-import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
-import com.accenture.claims.ai.application.service.EmailService;
-import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -24,7 +17,10 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @jakarta.ws.rs.Path("/fnol")
@@ -35,12 +31,6 @@ public class FnolResource {
     @Inject
     FNOLAssistantAgent agent;
     @Inject
-    FNOLEmailAssistantAgent emailAgent;
-    @Inject
-    EmailMediaAgent mediaAgent;
-    @Inject
-    DraftMissingInfoEmailTool draftMissingInfoEmailTool;
-    @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
     LanguageHelper languageHelper;
@@ -48,8 +38,6 @@ public class FnolResource {
     GuardrailsContext guardrailsContext;
     @Inject
     FinalOutputJSONStore finalOutputJSONStore;
-    @Inject
-    EmailService emailService;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -61,17 +49,6 @@ public class FnolResource {
         public ChatResponseDto(String sessionId, String answer, Object finalResult) {
             this.sessionId = sessionId;
             this.answer = answer;
-            this.finalResult = finalResult;
-        }
-    }
-
-    public static class MissingResponseDto {
-        public String sessionId;
-        public String emailBody;
-        public Object finalResult;
-        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
-            this.sessionId = sessionId;
-            this.emailBody = emailBody;
             this.finalResult = finalResult;
         }
     }
