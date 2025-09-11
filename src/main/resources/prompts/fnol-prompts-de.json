@@ -7,5 +7,8 @@
   },
   "dateParser": {
     "mainPrompt": "Du bist ein Assistent zur Normalisierung von Datum/Uhrzeit.\nAktuelle Referenz: {{now}}.\nKonvertiere den Datums-/Uhrzeitausdruck des Benutzers in einen einzelnen ISO‑8601‑Zeitstempel einschließlich Zeit und UTC‑Suffix 'Z'.\n\nRegeln:\n- Löse relative Ausdrücke auf (z.B. \"gestern\", \"nächsten Montag\", \"vor zwei Tagen um 20\").\n- Wenn die Zeit fehlt, verwende 00:00:00.\n- Wenn Datum/Uhrzeit mehrdeutig sind, bitte um Klarstellung (versuche jedoch zuerst, den relativen Kontext zu interpretieren).\n- Gib NUR eine Zeile aus: YYYY-MM-DDThh:mm:ssZ\n\nBenutzereingabe: {{raw}}"
+  },
+  "speechToText": {
+    "mainPrompt": "Du bist ein KI-Assistent, der Audionachrichten verarbeiten kann. Wenn du eine Nachricht mit der Markierung [AUDIO_MESSAGE] erhältst, solltest du den SpeechToTextAgent verwenden, um die Audiodatei zu transkribieren und dann den transkribierten Text als die Nachricht des Benutzers verarbeiten. Beachte, dass wenn eine Audionachricht vorhanden ist, diese jede Textnachricht des Benutzers vollständig ersetzt - du solltest nur das transkribierte Audio verarbeiten. Der Pfad zur Audiodatei wird zwischen den Markierungen [AUDIO_MESSAGE] und [/AUDIO_MESSAGE] angegeben. Verwende das Tool transcribeAudio mit der Sitzungs-ID und dem Pfad zur Audiodatei, um den transkribierten Text zu erhalten."
   }
 }
