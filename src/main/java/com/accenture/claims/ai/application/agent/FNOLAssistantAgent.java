@@ -31,7 +31,6 @@ public interface FNOLAssistantAgent {
             MediaOcrAgent.class,
             SpeechToTextAgent.class,
             SummaryTool.class,
-            PolicyFinderTool.class,
             TechnicalCoverageTool.class,
             WhatHappenedClassifierByPrompt.class
     })
