@@ -1,19 +1,19 @@
 package com.accenture.claims.ai.adapter.inbound.rest.claimstepbystep;
 
-import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
+import java.util.List;
 
 public class StepDocumentUploadValidatorAdapter implements StepCompletenessValidator {
-    @Override
-    public boolean isComplete(ClaimSubmissionProgress progress) {
-        if (progress == null) return false;
-        EmailParsingResult epr = progress.getEmailParsingResult();
-        if (epr == null) return false;
-        // DOCUMENT_UPLOAD step is responsible for media/doc attachments
-        return epr.getUploadedMedia() != null && !epr.getUploadedMedia().isEmpty();
+    public boolean isStepSpecificComplete(ClaimSubmissionProgress progress) {
+        //TODO implement
+        return true;
     }
 
-    @Override
     public ClaimSubmissionStep getStep() {
         return ClaimSubmissionStep.DOCUMENT_UPLOAD;
+    }
+
+    public List<String> getStepSpecificIncompleteFields(ClaimSubmissionProgress progress) {
+        //TODO implement
+        return List.of();
     }
 }
