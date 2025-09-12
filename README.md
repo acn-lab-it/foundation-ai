@@ -134,8 +134,14 @@ db.getSiblingDB("admin").createUser({
   user: "IL_TUO_USER",
   pwd:  "LA_TUA_PW",
   roles: [ { role: "root", db: "admin"} ]
-})
+});
 '
+```
+
+e.g.
+
+```bash
+mongosh --quiet --eval 'db.getSiblingDB("admin").createUser({ user: "admin", pwd: "SecurePassword", roles: [ { role: "root", db: "admin"} ]});'
 ```
 
 ## Note Importanti
