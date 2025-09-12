@@ -5,6 +5,7 @@ import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
+import com.accenture.claims.ai.application.tool.WelcomeTool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -17,13 +18,10 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @jakarta.ws.rs.Path("/api/fnol")
-@Consumes(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
 public class FnolResource {
 
@@ -37,6 +35,8 @@ public class FnolResource {
     GuardrailsContext guardrailsContext;
     @Inject
     FinalOutputJSONStore finalOutputJSONStore;
+    @Inject
+    WelcomeTool welcomeTool;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -63,9 +63,18 @@ public class FnolResource {
         }
 
         // Usa quello del form oppure genera
-        String sessionId = (form.sessionId == null || form.sessionId.isBlank())
-                ? UUID.randomUUID().toString()
-                : form.sessionId;
+        String sessionId;
+        if (form.sessionId == null || form.sessionId.isBlank()) {
+            sessionId = UUID.randomUUID().toString();
+            try {
+                return Response.ok(welcomeTool.welcomeMsg(form.policyNumber, form.emailAddress, acceptLanguage, sessionId)).build();
+            } catch (BadRequestException e) {
+                //todo gestione errori con @ExceptionHandler
+                return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
+            }
+        } else {
+            sessionId = form.sessionId;
+        }
 
         String userMessage = form.userMessage;
 
