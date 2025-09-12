@@ -21,10 +21,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
-@jakarta.ws.rs.Path("/fnol")
-@Consumes(MediaType.MULTIPART_FORM_DATA)
+@jakarta.ws.rs.Path("/api/fnol")
+@Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class FnolResource {
 
@@ -90,7 +89,7 @@ public class FnolResource {
                     paths.add(dst.toString());
                 }
                 userMessage += "\n\n[MEDIA_FILES]\n" +
-                        paths.stream().collect(Collectors.joining("\n")) +
+                        String.join("\n", paths) +
                         "\n[/MEDIA_FILES]";
             } catch (IOException e) {
                 return Response.serverError()
@@ -108,7 +107,7 @@ public class FnolResource {
 
                 // Se c'è un messaggio vocale, ignora il messaggio testuale dell'utente
                 // e usa solo il messaggio vocale
-                userMessage += "[AUDIO_MESSAGE]\n" + dst.toString() + "\n[/AUDIO_MESSAGE]";
+                userMessage += "[AUDIO_MESSAGE]\n" + dst + "\n[/AUDIO_MESSAGE]";
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"audio_upload_failure\"}")
@@ -144,9 +143,6 @@ public class FnolResource {
             ObjectMapper mapper = new ObjectMapper();
             var node = mapper.readTree(raw);
             String answer = node.has("answer") ? node.get("answer").asText() : raw;
-            Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
-                    ? mapper.convertValue(node.get("finalResult"), Object.class)
-                    : null;
             var fo = finalOutputJSONStore.get("final_output", sessionId);
             System.out.println("========== CURRENT FINAL_OUTPUT ==========");
             System.out.println(fo == null ? "<empty>" : fo.toPrettyString());
