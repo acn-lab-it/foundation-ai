@@ -11,7 +11,7 @@ import java.io.IOException;
 /**
  * Agent for converting speech audio files to text
  * This agent is used by the FNOLAssistantAgent to process vocal messages
- * 
+ *
  * It dynamically retrieves the language for the current session using SessionLanguageContext
  * and passes it to the SpeechToTextService to ensure transcription is done in the correct language.
  */
@@ -20,10 +20,9 @@ public class SpeechToTextAgent {
 
     @Inject
     SpeechToTextService speechToTextService;
-    
+
     @Inject
     SessionLanguageContext sessionLanguageContext;
-
     /**
      * Tool LLM: converts audio to text using Azure Speech-to-Text API
      * @param sessionId id of the current session
@@ -35,7 +34,7 @@ public class SpeechToTextAgent {
         try {
             // Get the language for the current session
             String language = sessionLanguageContext.getLanguage(sessionId);
-            
+
             // Convert audio to text using the service with the appropriate language
             return speechToTextService.convertAudioToText(audioFilePath, language);
         } catch (Exception e) {

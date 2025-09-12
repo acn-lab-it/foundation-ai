@@ -73,4 +73,84 @@ public class DateParserTool {
         System.out.println("================================");
         return m.group(1) + "Z";
     }
+
+    @Tool("Tell whether if the natural language contains enough information to calculate the date. Parameters: sessionId, raw.")
+    public boolean canCalculateDate(String sessionId, String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("Empty date/time input");
+        }
+        String lang = sessionLanguageContext.getLanguage(sessionId); // fallback interno a 'en'
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Europe/Rome"));  // puoi forzare ZoneId.of("Europe/Rome") se necessario
+
+        String sys = "You tell whether if the natural language contains enough information to calculate the date. Parameters: now: {{now}}, natural language: {{raw}}. Only accepted answers are 0 or 1.";
+
+        try {
+            // Carica template multilingua dal DB
+            LanguageHelper.PromptResult promptResult =
+                    languageHelper.getPromptWithLanguage(lang, "dateParser.completeDatePrompt");
+            sys = promptResult.prompt;
+        } catch (Exception e) {
+            // usa fallback
+        }
+        String prompt = languageHelper.applyVariables(
+                sys,
+                java.util.Map.of(
+                        "now", now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                        "raw", raw
+                )
+        );
+
+        String answer = chatModel.chat(List.of(
+                SystemMessage.from("You tell whether if the natural language contains enough information to calculate the date."),
+                UserMessage.from(prompt)
+        )).aiMessage().text().trim();
+
+        if(answer.equals("1")) {
+            return true;
+        }
+        if(answer.equals("0")) {
+            return false;
+        }
+        throw new IllegalArgumentException("LLM did not return 0 or 1: '" + answer + "'");
+    }
+
+    @Tool("Tell whether if the natural language contains enough information to calculate the time. Parameters: sessionId, raw.")
+    public boolean canCalculateTime(String sessionId, String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("Empty date/time input");
+        }
+        String lang = sessionLanguageContext.getLanguage(sessionId); // fallback interno a 'en'
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Europe/Rome"));  // puoi forzare ZoneId.of("Europe/Rome") se necessario
+
+        String sys = "You tell whether if the natural language contains enough information to calculate the time. Parameters: now: {{now}}, natural language: {{raw}}. Only accepted answers are 0 or 1.";
+
+        try {
+            // Carica template multilingua dal DB
+            LanguageHelper.PromptResult promptResult =
+                    languageHelper.getPromptWithLanguage(lang, "dateParser.completeTimePrompt");
+            sys = promptResult.prompt;
+        } catch (Exception e) {
+            // usa fallback
+        }
+        String prompt = languageHelper.applyVariables(
+                sys,
+                java.util.Map.of(
+                        "now", now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                        "raw", raw
+                )
+        );
+
+        String answer = chatModel.chat(List.of(
+                SystemMessage.from("You tell whether if the natural language contains enough information to calculate the time."),
+                UserMessage.from(prompt)
+        )).aiMessage().text().trim();
+
+        if(answer.equals("1")) {
+            return true;
+        }
+        if(answer.equals("0")) {
+            return false;
+        }
+        throw new IllegalArgumentException("LLM did not return 0 or 1: '" + answer + "'");
+    }
 }

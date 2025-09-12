@@ -29,25 +29,23 @@ public class TelegramBotLongPolling extends TelegramLongPollingBot {
 
     @Inject
     LanguageHelper languageHelper;
-    
+
     @Inject
     GuardrailsContext guardrailsContext;
 
     private static final Logger LOG = Logger.getLogger(TelegramBotLongPolling.class);
 
     private final TelegramBotConfig config;
-    private final FNOLAssistantAgent agent;
-    private final SessionLanguageContext sessionLanguageContext;
+    @Inject
+    FNOLAssistantAgent agent;
+    @Inject
+    SessionLanguageContext sessionLanguageContext;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
-    public TelegramBotLongPolling(TelegramBotConfig config,
-                                  FNOLAssistantAgent agent,
-                                  SessionLanguageContext sessionLanguageContext) {
+    public TelegramBotLongPolling(TelegramBotConfig config) {
         super(config.getBotToken());
         this.config = config;
-        this.agent = agent;
-        this.sessionLanguageContext = sessionLanguageContext;
         LOG.info("TelegramBotLongPolling initialized with username: " + config.getBotUsername());
     }
 
@@ -87,15 +85,31 @@ public class TelegramBotLongPolling extends TelegramLongPollingBot {
         // Handle voice messages
         if (message.hasVoice()) {
             try {
-                // In a real implementation, you would download the voice file
-                // For this example, we'll just create a placeholder
-                Path tmpDir = Files.createTempDirectory("telegram-audio-");
-                Path audioFile = tmpDir.resolve("voice-" + message.getVoice().getFileId() + ".ogg");
+                // Download the actual voice file from Telegram
+                org.telegram.telegrambots.meta.api.methods.GetFile getFile = new org.telegram.telegrambots.meta.api.methods.GetFile(message.getVoice().getFileId());
+                org.telegram.telegrambots.meta.api.objects.File tgFile = execute(getFile);
 
-                // Format as audio message for the agent
-                userMessage = "[AUDIO_MESSAGE]\n" + audioFile.toString() + "\n[/AUDIO_MESSAGE]";
-                LOG.info("Processing voice message: " + audioFile);
-            } catch (IOException e) {
+                // Determine a suitable extension based on Telegram's mime type (defaults to .ogg/.oga)
+                String mime = message.getVoice().getMimeType();
+                String ext = ".oga";
+                if (mime != null) {
+                    if (mime.contains("ogg")) ext = ".ogg";
+                    else if (mime.contains("mpeg") || mime.contains("mp3")) ext = ".mp3";
+                    else if (mime.contains("mp4") || mime.contains("m4a")) ext = ".m4a";
+                    else if (mime.contains("webm")) ext = ".webm";
+                    else if (mime.contains("wav")) ext = ".wav";
+                }
+
+                Path tmpDir = Files.createTempDirectory("telegram-audio-");
+                Path audioFile = tmpDir.resolve("voice-" + message.getVoice().getFileId() + ext).toAbsolutePath();
+
+                // Use Telegram SDK to download the file to the target path
+                downloadFile(tgFile, audioFile.toFile());
+
+                // Format as audio message for the agent (path must be absolute)
+                userMessage = "[AUDIO_MESSAGE]\n" + audioFile + "\n[/AUDIO_MESSAGE]";
+                LOG.info("Downloaded and processing voice message: " + audioFile);
+            } catch (TelegramApiException | IOException e) {
                 LOG.error("Error processing voice message", e);
                 sendErrorMessage(chatId, "Sorry, I couldn't process your voice message.");
                 return;
@@ -108,11 +122,11 @@ public class TelegramBotLongPolling extends TelegramLongPollingBot {
                 // In a real implementation, you would download the photo file
                 // For this example, we'll just create a placeholder
                 Path tmpDir = Files.createTempDirectory("telegram-media-");
-                Path mediaFile = tmpDir.resolve("photo-" + message.getPhoto().get(0).getFileId() + ".jpg");
+                Path mediaFile = tmpDir.resolve("photo-" + message.getPhoto().getFirst().getFileId() + ".jpg");
 
                 // Format as media file for the agent
                 userMessage = (userMessage != null ? userMessage : "") +
-                        "\n\n[MEDIA_FILES]\n" + mediaFile.toString() + "\n[/MEDIA_FILES]";
+                        "\n\n[MEDIA_FILES]\n" + mediaFile + "\n[/MEDIA_FILES]";
                 LOG.info("Processing photo: " + mediaFile);
             } catch (IOException e) {
                 LOG.error("Error processing photo", e);
@@ -131,7 +145,7 @@ public class TelegramBotLongPolling extends TelegramLongPollingBot {
 
                 // Format as media file for the agent
                 userMessage = (userMessage != null ? userMessage : "") +
-                        "\n\n[MEDIA_FILES]\n" + mediaFile.toString() + "\n[/MEDIA_FILES]";
+                        "\n\n[MEDIA_FILES]\n" + mediaFile + "\n[/MEDIA_FILES]";
                 LOG.info("Processing document: " + mediaFile);
             } catch (IOException e) {
                 LOG.error("Error processing document", e);

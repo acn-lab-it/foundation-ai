@@ -34,6 +34,7 @@ public class EmailParsingResultEntity extends PanacheMongoEntity {
     private List<MediaEntity> uploadedMedia;
     private String whatHappenedCode;
     private String whatHappenedContext;
+    private String formattedAddress;
 
     // store any other unmapped fields
     @BsonExtraElements

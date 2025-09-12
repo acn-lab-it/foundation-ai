@@ -2,16 +2,10 @@ package com.accenture.claims.ai.adapter.inbound.rest;
 
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.email.AttachmentDto;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
-import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
-import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
-import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
-import com.accenture.claims.ai.application.service.EmailService;
-import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
+import com.accenture.claims.ai.application.tool.WelcomeTool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -25,21 +19,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
 
-@jakarta.ws.rs.Path("/fnol")
+@jakarta.ws.rs.Path("/api/fnol")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
 public class FnolResource {
 
     @Inject
     FNOLAssistantAgent agent;
-    @Inject
-    FNOLEmailAssistantAgent emailAgent;
-    @Inject
-    EmailMediaAgent mediaAgent;
-    @Inject
-    DraftMissingInfoEmailTool draftMissingInfoEmailTool;
     @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
@@ -49,7 +36,7 @@ public class FnolResource {
     @Inject
     FinalOutputJSONStore finalOutputJSONStore;
     @Inject
-    EmailService emailService;
+    WelcomeTool welcomeTool;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -65,17 +52,6 @@ public class FnolResource {
         }
     }
 
-    public static class MissingResponseDto {
-        public String sessionId;
-        public String emailBody;
-        public Object finalResult;
-        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
-            this.sessionId = sessionId;
-            this.emailBody = emailBody;
-            this.finalResult = finalResult;
-        }
-    }
-
     @POST
     @jakarta.ws.rs.Path("/chat")
     @jakarta.enterprise.context.control.ActivateRequestContext
@@ -87,9 +63,18 @@ public class FnolResource {
         }
 
         // Usa quello del form oppure genera
-        String sessionId = (form.sessionId == null || form.sessionId.isBlank())
-                ? UUID.randomUUID().toString()
-                : form.sessionId;
+        String sessionId;
+        if (form.sessionId == null || form.sessionId.isBlank()) {
+            sessionId = UUID.randomUUID().toString();
+            try {
+                return Response.ok(welcomeTool.welcomeMsg(form.policyNumber, form.emailAddress, acceptLanguage, sessionId)).build();
+            } catch (BadRequestException e) {
+                //todo gestione errori con @ExceptionHandler
+                return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
+            }
+        } else {
+            sessionId = form.sessionId;
+        }
 
         String userMessage = form.userMessage;
 
@@ -113,7 +98,7 @@ public class FnolResource {
                     paths.add(dst.toString());
                 }
                 userMessage += "\n\n[MEDIA_FILES]\n" +
-                        paths.stream().collect(Collectors.joining("\n")) +
+                        String.join("\n", paths) +
                         "\n[/MEDIA_FILES]";
             } catch (IOException e) {
                 return Response.serverError()
@@ -131,7 +116,7 @@ public class FnolResource {
 
                 // Se c'è un messaggio vocale, ignora il messaggio testuale dell'utente
                 // e usa solo il messaggio vocale
-                userMessage += "[AUDIO_MESSAGE]\n" + dst.toString() + "\n[/AUDIO_MESSAGE]";
+                userMessage += "[AUDIO_MESSAGE]\n" + dst + "\n[/AUDIO_MESSAGE]";
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"audio_upload_failure\"}")
@@ -167,9 +152,6 @@ public class FnolResource {
             ObjectMapper mapper = new ObjectMapper();
             var node = mapper.readTree(raw);
             String answer = node.has("answer") ? node.get("answer").asText() : raw;
-            Object finalResult = node.has("finalResult") && !node.get("finalResult").isNull()
-                    ? mapper.convertValue(node.get("finalResult"), Object.class)
-                    : null;
             var fo = finalOutputJSONStore.get("final_output", sessionId);
             System.out.println("========== CURRENT FINAL_OUTPUT ==========");
             System.out.println(fo == null ? "<empty>" : fo.toPrettyString());

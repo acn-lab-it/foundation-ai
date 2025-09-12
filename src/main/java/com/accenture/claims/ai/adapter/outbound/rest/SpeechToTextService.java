@@ -1,29 +1,27 @@
 package com.accenture.claims.ai.adapter.outbound.rest;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import org.jboss.resteasy.reactive.multipart.FileUpload;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Base64;
 import java.util.Scanner;
 import java.util.UUID;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Service for converting speech audio files to text using Azure Speech-to-Text API
- * 
+ * <p>
  * This service supports dynamic language selection for transcription by mapping
  * language codes (e.g., "en", "it", "fr") to the appropriate locale codes for the
  * Azure Speech-to-Text API (e.g., "en-US", "it-IT", "fr-FR").
- * 
+ * <p>
  * The language parameter is used to set the locale in the API request, ensuring
  * that transcription is done in the correct language.
  */
@@ -31,37 +29,18 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class SpeechToTextService {
 
-    @Inject
-    RestService restService;
-
     @ConfigProperty(name = "azure.speech.api-key")
     String azureApiKey;
 
-    @ConfigProperty(name = "azure.speech.resource-name")
-    String azureResourceName;
-
-    //@ConfigProperty(name = "azure.speech.region")
-    private static final String azureRegion = "franc-m3zn2u2p";
+    @ConfigProperty(name = "azure.speech.region")
+    String azureRegion;
 
     // API version for the new Speech-to-Text API
     private static final String API_VERSION = "2024-11-15";
-    
-    /**
-     * Converts an audio file to text using Azure Speech-to-Text API
-     * This is a backward-compatible overload that uses the default locale (en-US)
-     *
-     * @param audioFilePath The path to the audio file to convert
-     * @return The transcribed text
-     * @throws IOException If there's an error reading the file
-     */
-    public String convertAudioToText(String audioFilePath) throws IOException {
-        // Call the new method with default language "en"
-        return convertAudioToText(audioFilePath, "en");
-    }
-    
+
     /**
      * Maps a language code to a locale code for Azure Speech-to-Text API
-     * 
+     *
      * @param language The language code (e.g., "en", "it", "fr")
      * @return The locale code (e.g., "en-US", "it-IT", "fr-FR")
      */
@@ -69,24 +48,24 @@ public class SpeechToTextService {
         if (language == null || language.isEmpty()) {
             return "en-US"; // Default to English (US)
         }
-        
+
         // Map common language codes to locale codes
-        switch (language.toLowerCase()) {
-            case "en": return "en-US";
-            case "it": return "it-IT";
-            case "fr": return "fr-FR";
-            case "de": return "de-DE";
-            case "es": return "es-ES";
-            case "pt": return "pt-PT";
-            case "nl": return "nl-NL";
-            case "ja": return "ja-JP";
-            case "ko": return "ko-KR";
-            case "zh": return "zh-CN";
-            case "ru": return "ru-RU";
-            case "ar": return "ar-SA";
-            case "hi": return "hi-IN";
-            default: return language + "-" + language.toUpperCase(); // Fallback for other languages
-        }
+        return switch (language.toLowerCase()) {
+            case "en" -> "en-US";
+            case "it" -> "it-IT";
+            case "fr" -> "fr-FR";
+            case "de" -> "de-DE";
+            case "es" -> "es-ES";
+            case "pt" -> "pt-PT";
+            case "nl" -> "nl-NL";
+            case "ja" -> "ja-JP";
+            case "ko" -> "ko-KR";
+            case "zh" -> "zh-CN";
+            case "ru" -> "ru-RU";
+            case "ar" -> "ar-SA";
+            case "hi" -> "hi-IN";
+            default -> language + "-" + language.toUpperCase(); // Fallback for other languages
+        };
     }
 
     /**
@@ -102,14 +81,15 @@ public class SpeechToTextService {
         byte[] audioBytes = Files.readAllBytes(Path.of(audioFilePath));
 
         // Create a boundary string for multipart/form-data
-        String boundary = "Boundary-" + UUID.randomUUID().toString();
+        String boundary = "Boundary-" + UUID.randomUUID();
 
-        // Construct the API URL
-        String apiUrl = String.format("https://%s-eastus2.cognitiveservices.azure.com/speechtotext/transcriptions:transcribe?api-version=%s",
+        // Construct the API URL using the configured region
+        // Reference: https://learn.microsoft.com/azure/ai-services/speech-service/reference-rest-speech-to-text
+        String apiUrl = String.format("https://%s.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=%s",
                 azureRegion, API_VERSION);
 
         // Create connection
-        URL url = new URL(apiUrl);
+        URL url = URI.create(apiUrl).toURL();
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
@@ -122,9 +102,11 @@ public class SpeechToTextService {
         // Create the multipart/form-data request body
         try (OutputStream outputStream = connection.getOutputStream()) {
             // Add the audio file part
+            String contentType = detectContentType(audioFilePath);
+            String filename = deriveFilename(audioFilePath);
             outputStream.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
-            outputStream.write(("Content-Disposition: form-data; name=\"audio\"; filename=\"audio.wav\"\r\n").getBytes(StandardCharsets.UTF_8));
-            outputStream.write(("Content-Type: audio/wav\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+            outputStream.write(("Content-Disposition: form-data; name=\"audio\"; filename=\"" + filename + "\"\r\n").getBytes(StandardCharsets.UTF_8));
+            outputStream.write(("Content-Type: " + contentType + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
             outputStream.write(audioBytes);
             outputStream.write(("\r\n").getBytes(StandardCharsets.UTF_8));
 
@@ -135,10 +117,10 @@ public class SpeechToTextService {
 
             // Map language code to locale code
             String locale = mapLanguageToLocale(language);
-            
+
             // Log the locale being used for debugging
             log.info("Using locale '{}' for transcription (from language code '{}')", locale, language);
-            
+
             // Definition JSON with dynamic locale
             String definitionJson = String.format("""
                     {
@@ -165,7 +147,7 @@ public class SpeechToTextService {
         // Format the response to match the expected format for extractTranscribedText
         String formattedResponse = String.format("""
                 { "status": %d, "body": %s }
-                """, responseCode, response.toString());
+                """, responseCode, response);
 
         // Parse the response to extract the transcribed text
         String transcribedText = extractTranscribedText(formattedResponse);
@@ -175,6 +157,31 @@ public class SpeechToTextService {
         System.out.println("========================================");
 
         return transcribedText;
+    }
+
+    private String detectContentType(String audioFilePath) {
+        String name = audioFilePath == null ? "" : audioFilePath.toLowerCase();
+        if (name.endsWith(".wav")) return "audio/wav";
+        if (name.endsWith(".ogg") || name.endsWith(".oga") || name.endsWith(".opus")) return "audio/ogg";
+        if (name.endsWith(".mp3")) return "audio/mpeg";
+        if (name.endsWith(".m4a") || name.endsWith(".mp4")) return "audio/mp4";
+        if (name.endsWith(".webm")) return "audio/webm";
+        if (name.endsWith(".caf")) return "audio/x-caf";
+        // Fallback
+        return "application/octet-stream";
+    }
+
+    private String deriveFilename(String audioFilePath) {
+        try {
+            Path p = Path.of(audioFilePath);
+            String fn = p.getFileName() != null ? p.getFileName().toString() : null;
+            if (fn == null || fn.isBlank()) {
+                return "audio";
+            }
+            return fn;
+        } catch (Exception e) {
+            return "audio";
+        }
     }
 
     /**

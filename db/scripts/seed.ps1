@@ -1,26 +1,35 @@
 param(
-  [string]$MongoUri = $env:MONGO_URI
-    ? $env:MONGO_URI
-    : "mongodb://localhost:27017",
+  [string]$MongoUri = $env:MONGO_URI,
   [string]$DbName = $env:MONGO_DB
 )
 
-if (-not $DbName) {
-  $appProps = "src\main\resources\application.properties"
-  if (Test-Path $appProps) {
-    $line = Select-String -Path $appProps -Pattern "^quarkus.mongodb.database=" | Select-Object -First 1
-    if ($line) { $DbName = $line -replace ".*=", "" }
-  }
-  if (-not $DbName) { $DbName = "local_db" }
+# Wrapper: call the Bash script via WSL
+$wsl = (Get-Command wsl -ErrorAction SilentlyContinue)
+if (-not $wsl) {
+  Write-Error "WSL not found. Please install Windows Subsystem for Linux and ensure 'wsl' is in PATH. Alternatively run db/scripts/seed.sh directly in a Linux shell."
+  exit 1
 }
 
-# Run all js in db\init in order
-$initDir = "db\init"
-if (Test-Path $initDir) {
-  Get-ChildItem -Path $initDir -Filter *.js | Sort-Object Name | ForEach-Object {
-    Write-Host "Applying init script $($_.Name) ..."
-    mongosh $MongoUri/$DbName $_.FullName
-  }
-} else {
-  Write-Host "No init scripts found."
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$bashScriptWin = Join-Path $scriptDir "seed.sh"
+if (-not (Test-Path $bashScriptWin)) {
+  Write-Error "Bash script not found: $bashScriptWin"
+  exit 1
 }
+$bashScriptWinEsc = $bashScriptWin -replace "\\","/"
+$bashScriptWsl = (wsl wslpath -a "$bashScriptWinEsc").Trim()
+
+$envArgs = @()
+if ($MongoUri) { $envArgs += ("MONGO_URI='" + $MongoUri + "'") }
+if ($DbName)   { $envArgs += ("MONGO_DB='"  + $DbName   + "'") }
+
+$joinedEnv = ($envArgs -join ' ')
+if ($joinedEnv) { $joinedEnv = "env $joinedEnv " }
+$bashCmd = @"
+$joinedEnv'$bashScriptWsl'
+"@
+
+Write-Host ("[INFO] PowerShell version: {0}" -f $PSVersionTable.PSVersion)
+
+$bashCmd = $bashCmd -replace "`r", ""
+wsl bash -lc "$bashCmd"

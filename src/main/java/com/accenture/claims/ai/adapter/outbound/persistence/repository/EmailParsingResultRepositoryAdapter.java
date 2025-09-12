@@ -31,6 +31,14 @@ public class EmailParsingResultRepositoryAdapter implements EmailParsingResultRe
         return find("sessionId = ?1", sessionId).firstResultOptional().map(emailParsingResultMapper::toEmailParsingResult);
     }
 
+    @Override
+    public List<EmailParsingResult> findAllByEmailId(String emailId) {
+        return find("emailId = ?1", emailId)
+                .stream()
+                .map(emailParsingResultMapper::toEmailParsingResult)
+                .collect(Collectors.toList());
+    }
+
     public Optional<EmailParsingResult> findByEmailIdAndSessionId(String emailId, String sessionId) {
         return find("emailId = ?1 and sessionId = ?2", emailId, sessionId).firstResultOptional().map(emailParsingResultMapper::toEmailParsingResult);
     }

@@ -13,6 +13,9 @@ import lombok.NonNull;
 import org.bson.Document;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 @ApplicationScoped
 public class FinalOutputJSONStore {
 
@@ -135,5 +138,14 @@ public class FinalOutputJSONStore {
                 target.set(key, value);
             }
         });
+        updateDate(target);
+    }
+
+    private void updateDate(ObjectNode target) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        LocalDateTime dateTime = LocalDateTime.now();
+        String formattedDateTime = dateTime.format(formatter);
+
+        target.set("updatedAt",mapper.convertValue(formattedDateTime, JsonNode.class));
     }
 }

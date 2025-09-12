@@ -1,7 +1,8 @@
-package com.accenture.claims.ai.application.service;
+package com.accenture.claims.ai.adapter;
 
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
+import com.accenture.claims.ai.port.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.annotation.PostConstruct;
@@ -16,7 +17,7 @@ import java.net.http.HttpResponse;
 import java.util.Map;
 
 @ApplicationScoped
-public class EmailService {
+public class EmailServiceAdapter implements EmailService {
 
     ObjectMapper mapper;
 

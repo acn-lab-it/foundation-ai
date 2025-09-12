@@ -1,6 +1,5 @@
 package com.accenture.claims.ai.adapter.inbound.rest;
 
-import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.AttachmentDto;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.DownloadedAttachment;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.email.EmailDto;
@@ -8,12 +7,13 @@ import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.agent.emailFlow.EmailMediaAgent;
 import com.accenture.claims.ai.application.agent.emailFlow.FNOLEmailAssistantAgent;
-import com.accenture.claims.ai.application.service.EmailService;
+import com.accenture.claims.ai.application.tool.DateParserTool;
+import com.accenture.claims.ai.application.tool.emailFlow.AddressTool;
 import com.accenture.claims.ai.application.tool.emailFlow.DraftMissingInfoEmailTool;
 import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
 import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
 import com.accenture.claims.ai.domain.repository.EmailParsingResultRepository;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.accenture.claims.ai.port.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
@@ -41,6 +41,8 @@ public class FnolMailResource {
     @Inject
     DraftMissingInfoEmailTool draftMissingInfoEmailTool;
     @Inject
+    AddressTool addressTool;
+    @Inject
     SessionLanguageContext sessionLanguageContext;
     @Inject
     LanguageHelper languageHelper;
@@ -56,7 +58,21 @@ public class FnolMailResource {
     private static final Set<String> VID_EXT = Set.of(
             "mp4","mov","m4v","avi","mkv","webm","mpeg","mpg","3gp","3gpp","wmv"
     );
+    @Inject
+    DateParserTool dateParserTool;
 
+    /**
+     * Parses and processes an email based on its unique identifier. The method analyzes the email's content,
+     * processes its attachments, and communicates with external agents, extracting necessary data
+     * for further operations and returning a different kind of response depending on the agents' output.
+     *
+     * @param emailId        the unique identifier of the email to process
+     * @param acceptLanguage the preferred language for localization in the response
+     * @return a {@link Response} containing the parsed email data, missing information details (if any),
+     *         or error messages in case of failures
+     * @throws Exception if an error occurs during the processing, such as issues interacting with the email service
+     *                   or file system, or failures in communication with external agents
+     */
     @POST
     @jakarta.ws.rs.Path("/parseEmail/{emailId}")
     @jakarta.enterprise.context.control.ActivateRequestContext
@@ -75,8 +91,11 @@ public class FnolMailResource {
             return Response.status(Response.Status.NOT_FOUND).build();
         }
 
-        String userMessage = email.getText();
         String sender = extractEmailAddress(email.getFrom());
+        String userMessage = String.format("""
+                FROM: %s
+                BODY: %s
+                """, email.getFrom(), email.getText());
 
         List<String> mediaPaths = new ArrayList<>();
 
@@ -129,13 +148,15 @@ public class FnolMailResource {
 
         String rawEmailData = emailAgent.chat(sessionId, emailSystemPrompt, userMessage);
 
-        Optional<FnolResource.MissingResponseDto> maybeMissing = computeMissingPayload(sessionId, emailId, sender);
+        Optional<MissingResponseDto> maybeMissing = computeMissingPayload(sessionId, emailId, sender, email.getText());
         if (maybeMissing.isPresent()) {
             System.out.println("=================== MISSING INFO AGENT Response =======================");
             System.out.println("RAW: " + maybeMissing.get().emailBody);
             System.out.println("FinalResult: " + maybeMissing.get().finalResult);
             return Response.status(422).entity(maybeMissing.get()).build();
         }
+
+        extractFormatAndSaveAddress(emailId, sessionId);
 
         // ===== Invocazione MEDIA AGENT se ci sono media =====
         if (!mediaPaths.isEmpty()) {
@@ -198,17 +219,13 @@ public class FnolMailResource {
         return Response.ok(dto).build();
     }
 
-    public static class MissingResponseDto {
-        public String sessionId;
-        public String emailBody;
-        public Object finalResult;
-        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
-            this.sessionId = sessionId;
-            this.emailBody = emailBody;
-            this.finalResult = finalResult;
-        }
+    private void extractFormatAndSaveAddress(String emailId, String sessionId) {
+        EmailParsingResult current = getEmailParsingResult(sessionId, emailId);
+        String formattedAddress = addressTool.formatAddress(sessionId, current.getIncidentLocation());
+        current.setFormattedAddress(formattedAddress);
+        emailParsingResultRepository.update(current);
     }
-    
+
     private static String extractEmailAddress(String from) {
         if (from == null) return null;
         // prova match di un indirizzo email
@@ -231,18 +248,9 @@ public class FnolMailResource {
         return IMG_EXT.contains(ext) || VID_EXT.contains(ext);
     }
 
-    private Optional<FnolResource.MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender) throws Exception {
+    private Optional<MissingResponseDto> computeMissingPayload(String sessionId, String emailId, String sender, String userEmailBody) throws Exception {
         // 1) tenta per (sessionId,emailId)
-        Optional<EmailParsingResult> optCurrent = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
-        if (optCurrent.isEmpty()) {
-            // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
-            //FIXME: ci serve davvero? non possiamo trovare direttamente per session id?
-            optCurrent = emailParsingResultRepository.findBySessionId(sessionId);
-            if (optCurrent.isEmpty()) {
-                throw new RuntimeException("JSON NON PRESENTE");
-            }
-        }
-        EmailParsingResult current = optCurrent.get();
+        EmailParsingResult current = getEmailParsingResult(sessionId, emailId);
 
         ObjectNode missing = M.createObjectNode();
 
@@ -250,6 +258,12 @@ public class FnolMailResource {
         if (StringUtils.isBlank(current.getPolicyNumber()))     missing.putNull("policyNumber");
         if (StringUtils.isBlank(current.getIncidentDate()))      missing.putNull("incidentDate");
         if (StringUtils.isBlank(current.getIncidentLocation()))  missing.putNull("incidentLocation");
+
+        if(!isCityPresent(sessionId, current.getIncidentLocation())) missing.putNull("incidentLocation.city");
+        if(!isStreetNameAndNumberPresent(sessionId, current.getIncidentLocation())) missing.putNull("incidentLocation.streetNameAndNumber");
+        if(!isDatePresent(sessionId, userEmailBody)) missing.putNull("incidentDate.completeDate");
+        if(!isTimePresent(sessionId, userEmailBody)) missing.putNull("incidentDate.completeTime");
+
 
         Reporter reporter = current.getReporter();
         if (reporter == null) {
@@ -294,18 +308,61 @@ public class FnolMailResource {
                 locale
         );
 
-        return Optional.of(new FnolResource.MissingResponseDto(
+        return Optional.of(new MissingResponseDto(
                 sessionId,
                 emailBody,
                 current
         ));
     }
 
-    // utility
-    private static boolean isBlank(JsonNode n) {
-        if (n == null || n.isMissingNode() || n.isNull()) return true;
-        if (n.isTextual()) return n.asText().trim().isEmpty();
-        return false;
+    private EmailParsingResult getEmailParsingResult(String sessionId, String emailId) {
+        Optional<EmailParsingResult> optCurrent = emailParsingResultRepository.findByEmailIdAndSessionId(emailId, sessionId);
+        if (optCurrent.isEmpty()) {
+            // 2) Fallback: email_parsing_result solo per sessionId (primo step potrebbe aver salvato senza emailId)
+            //FIXME: ci serve davvero? non possiamo trovare direttamente per session id?
+            optCurrent = emailParsingResultRepository.findBySessionId(sessionId);
+
+        }
+        if(optCurrent.isEmpty()) {
+            List<EmailParsingResult> allByEmailId = emailParsingResultRepository.findAllByEmailId(emailId);
+            if(!allByEmailId.isEmpty()) {
+                optCurrent = Optional.of(allByEmailId.getLast());
+            }
+        }
+        if (optCurrent.isEmpty()) {
+            throw new RuntimeException("JSON NON PRESENTE");
+        }
+        EmailParsingResult current = optCurrent.get();
+        return current;
     }
+
+    private boolean isCityPresent(String sessionId, String incidentLocation) {
+        return addressTool.city_verification_tool(sessionId, incidentLocation);
+    }
+
+    private boolean isStreetNameAndNumberPresent(String sessionId, String incidentLocation) {
+        return addressTool.address_verification_tool(sessionId, incidentLocation);
+    }
+
+    private boolean isDatePresent(String sessionId, String userEmailBody){
+        return dateParserTool.canCalculateDate(sessionId, userEmailBody);
+    }
+
+    private boolean isTimePresent(String sessionId, String userEmailBody){
+        return dateParserTool.canCalculateTime(sessionId, userEmailBody);
+    }
+
+
+    public static class MissingResponseDto {
+        public String sessionId;
+        public String emailBody;
+        public Object finalResult;
+        public MissingResponseDto(String sessionId, String emailBody, Object finalResult) {
+            this.sessionId = sessionId;
+            this.emailBody = emailBody;
+            this.finalResult = finalResult;
+        }
+    }
+    
 
 }

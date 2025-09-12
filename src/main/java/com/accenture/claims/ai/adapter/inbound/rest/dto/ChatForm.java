@@ -25,4 +25,10 @@ public class ChatForm {
     @FormParam("userAudioMessage")
     @PartType("application/octet-stream")
     public FileUpload userAudioMessage;
+
+    @FormParam("policyNumber")
+    public String policyNumber;
+
+    @FormParam("emailAddress")
+    public String emailAddress;
 }

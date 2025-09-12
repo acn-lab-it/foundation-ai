@@ -1,1 +1,220 @@
-[]
+[
+  {
+    "_id": "6894c1a99b8f5a8f3f89b03e",
+    "policyStatus": "ACTIVE",
+    "productReference": {
+      "version": "0.3.0",
+      "name": "Allianz BMP Motor Product",
+      "groupNameApl": "9e4f116b-05aa-4535-95e6-f02ca3446635",
+      "groupName": "MOTOR",
+      "code": "RMTP"
+    },
+    "insuredProperty": {
+      "_id": "d22ca1cd-f74e-4800-b419-51c568960308",
+      "type": "S47",
+      "address": {
+        "fullAddress": "Linzer Str.  , WIEN 1010",
+        "streetDetails": {
+          "name": "Linzer Str.",
+          "nameType": " ",
+          "number": "225",
+          "numberType": "STNO"
+        },
+        "country": "AUT",
+        "state": "VI",
+        "countryCode": "AUT",
+        "city": "WIEN",
+        "postalCode": "1010",
+        "_class": "com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity"
+      }
+    },
+    "beginDate": "2024-11-15T00:00:00.000Z",
+    "endDate": "2025-11-15T00:00:00.000Z",
+    "policyNumber": "MTRHHR00026397",
+    "policyHolders": [
+      {
+        "_id": "0ae2f5c8-f2bc-41cd-8265-44b4119795b8",
+        "firstName": "Lukas",
+        "lastName": "Baumgartner",
+        "dateOfBirth": "1993-11-17T00:00:00.000Z",
+        "gender": "M",
+        "address": {
+          "fullAddress": "7 REST CT, SPRINGFIELD LAKES QLD 4300",
+          "streetDetails": {
+            "name": "REST",
+            "nameType": "CT",
+            "number": "7",
+            "numberType": "STNO"
+          },
+          "country": "AUS",
+          "state": "QL",
+          "countryCode": "AUS",
+          "city": "SPRINGFIELD LAKES",
+          "postalCode": "4300",
+          "_class": "com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity"
+        },
+        "contactChannels": [
+          {
+            "communicationDetails": "allianz@test.at",
+            "communicationType": "EMAIL"
+          },
+          {
+            "communicationDetails": "+61456677674",
+            "communicationType": "MOBILE"
+          }
+        ],
+        "customerId": "V20F49795762C4526018FDEF311E2365E5BFD11D6DEC965B554DE52CB4DA905C65A046258DC566B7B77B4385F000BF6AF4",
+        "isPolicyHolderPayer": true,
+        "roles": [
+          "LANDLORD"
+        ],
+        "_class": "com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.common.policyholder.NaturalPersonPolicyHolderEntity"
+      }
+    ],
+    "_class": "com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.retail.home.RetailHomePolicyEntity"
+  },
+  {
+    "_id": "6894c1a99b8f5a8f3f89b03f",
+    "policyStatus": "ACTIVE",
+    "productReference": {
+      "version": "0.3.0",
+      "name": "Allianz BMP Household Product",
+      "groupNameApl": "9e4f116b-05aa-4535-95e6-f02ca3446635",
+      "groupName": "MULTIRISK",
+      "code": "RHHMP"
+    },
+    "insuredProperty": {
+      "_id": "d22ca1cd-f74e-4800-b419-51c568960308",
+      "type": "S47",
+      "address": {
+        "fullAddress": "Linzer Str.  , WIEN 1010",
+        "streetDetails": {
+          "name": "Linzer Str.",
+          "nameType": " ",
+          "number": "225",
+          "numberType": "STNO"
+        },
+        "country": "AUT",
+        "state": "VI",
+        "countryCode": "AUT",
+        "city": "WIEN",
+        "postalCode": "1010",
+        "_class": "com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity"
+      }
+    },
+    "beginDate": "2024-11-15T00:00:00.000Z",
+    "endDate": "2025-11-15T00:00:00.000Z",
+    "policyNumber": "AUTHHR00026397",
+    "policyHolders": [
+      {
+        "_id": "0ae2f5c8-f2bc-41cd-8265-44b4119795b8",
+        "firstName": "Lukas",
+        "lastName": "Baumgartner",
+        "dateOfBirth": "1993-11-17T00:00:00.000Z",
+        "gender": "M",
+        "address": {
+          "fullAddress": "7 REST CT, SPRINGFIELD LAKES QLD 4300",
+          "streetDetails": {
+            "name": "REST",
+            "nameType": "CT",
+            "number": "7",
+            "numberType": "STNO"
+          },
+          "country": "AUS",
+          "state": "QL",
+          "countryCode": "AUS",
+          "city": "SPRINGFIELD LAKES",
+          "postalCode": "4300",
+          "_class": "com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity"
+        },
+        "contactChannels": [
+          {
+            "communicationDetails": "allianz@test.at",
+            "communicationType": "EMAIL"
+          },
+          {
+            "communicationDetails": "+61456677674",
+            "communicationType": "MOBILE"
+          }
+        ],
+        "customerId": "V20F49795762C4526018FDEF311E2365E5BFD11D6DEC965B554DE52CB4DA905C65A046258DC566B7B77B4385F000BF6AF4",
+        "isPolicyHolderPayer": true,
+        "roles": [
+          "LANDLORD"
+        ],
+        "_class": "com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.common.policyholder.NaturalPersonPolicyHolderEntity"
+      }
+    ],
+    "_class": "com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.retail.home.RetailHomePolicyEntity"
+  },
+  {
+    "_id": "6894c1a99b8f5a8f3f89b03d",
+    "policyStatus": "EXPIRED",
+    "productReference": {
+      "version": "1.0.1",
+      "name": "Allianz Home Basic",
+      "groupNameApl": "a1b2c3d4-5678-9101-1121-abcdefabcdef",
+      "groupName": "HOME",
+      "code": "HMBP"
+    },
+    "insuredProperty": {
+      "_id": "33dc2341-df02-44f4-a2d9-aaa120b9c111",
+      "type": "H24",
+      "address": {
+        "fullAddress": "10 King St, Melbourne VIC 3000",
+        "streetDetails": {
+          "name": "King St",
+          "nameType": "ST",
+          "number": "10",
+          "numberType": "STNO"
+        },
+        "country": "AUS",
+        "state": "VIC",
+        "countryCode": "AUS",
+        "city": "Melbourne",
+        "postalCode": "3000",
+        "_class": "com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity"
+      }
+    },
+    "beginDate": "2021-01-01T00:00:00.000Z",
+    "endDate": "2022-01-01T00:00:00.000Z",
+    "policyNumber": "HMB1234567890",
+    "policyHolders": [
+      {
+        "_id": "12345678-aaaa-bbbb-cccc-112233445566",
+        "firstName": "Emily",
+        "lastName": "Smith",
+        "dateOfBirth": "1990-01-01T00:00:00.000Z",
+        "gender": "F",
+        "address": {
+          "fullAddress": "10 King St, Melbourne VIC 3000",
+          "streetDetails": {
+            "name": "King St",
+            "nameType": "ST",
+            "number": "10",
+            "numberType": "STNO"
+          },
+          "country": "AUS",
+          "state": "VIC",
+          "countryCode": "AUS",
+          "city": "Melbourne",
+          "postalCode": "3000",
+          "_class": "com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity"
+        },
+        "contactChannels": [
+          {
+            "communicationDetails": "emily.smith@email.com",
+            "communicationType": "EMAIL"
+          }
+        ],
+        "customerId": "ABC123XYZ456",
+        "isPolicyHolderPayer": true,
+        "roles": [
+          "OWNER"
+        ],
+        "_class": "com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.common.policyholder.NaturalPersonPolicyHolderEntity"
+      }
+    ],
+    "_class": "com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.retail.home.RetailHomePolicyEntity"
+  }
+]
