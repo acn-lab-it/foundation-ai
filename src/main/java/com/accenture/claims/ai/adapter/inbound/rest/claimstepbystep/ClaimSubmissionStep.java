@@ -54,4 +54,8 @@ public enum ClaimSubmissionStep {
     private static List<String> list(String... fields) {
         return Collections.unmodifiableList(Arrays.asList(fields));
     }
+
+    public StepCompletenessValidator getValidator() {
+        return validator;
+    }
 }
