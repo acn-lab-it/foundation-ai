@@ -40,6 +40,7 @@ public class StepParseMessageTool {
                                 """.formatted(responseFormat.jsonSchema())), //TODO use a proper format
                         UserMessage.from(userMessage)
                 )
+                .temperature(0.0)
                 .build());
 
         var result = parse(resp.aiMessage().text());
