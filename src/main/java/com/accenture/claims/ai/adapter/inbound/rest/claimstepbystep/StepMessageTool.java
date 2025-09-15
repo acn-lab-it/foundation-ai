@@ -15,6 +15,8 @@ public class StepMessageTool {
     ChatModel chatModel;
     @Inject
     NextStepAdapter nextStepAdapter;
+    @Inject
+    ClaimSubmissionProgressRepository claimSubmissionProgressRepository;
 
     @Tool(value = """
                 Compose a professional message asking the reporter the missing data of .
@@ -27,23 +29,21 @@ public class StepMessageTool {
             
             """,
             name = "getStepMessage")
-    public String getStepMessage(String sessionId, ClaimSubmissionStep step, ClaimSubmissionProgress progress, String locale) {
-        //Dato uno step ed il progress associato stampo il messaggio facendo check che i dati siano corretti
+    public String getStepMessage(String sessionId, ClaimSubmissionStep step, String locale) {
+        var progress = claimSubmissionProgressRepository.findBySessionId(sessionId);
         if (step.isComplete(progress)) {
             step = nextStepAdapter.nextStep(progress);
         }
-        step.getValidator().getIncompleteFields(progress);
         String sys = """
-                Write a courteous and professional message that tell to the assistant to retrieve and write the missing data.
-                - 
-                - the 'step' field indicates an enum that indicates the step we are in, if complete ignore the field has already been viewed otherwise for the type entered check that the fields in the 'fields' list are filled
-                - Output language should match the locale if provided (e.g., "it" or "en"). Default to English.
-                """;
+                You are Happy Claim, a chatbot that fills in information through interactions with a human user.
+                You must write a courteous and professional chat message in order to gather information about an insurance claim.
+                Please, reply in this language: %s
+                Here are the pieces of information you need to ask about in human like language.
+                %s
+                """.formatted(locale, String.join(", ", step.getValidator().getIncompleteFields(progress)));
 
         ChatResponse resp = chatModel.chat(ChatRequest.builder()
                 .messages(java.util.List.of(SystemMessage.from(sys)))
-                .temperature(0.0)
-                .maxOutputTokens(300)
                 .build());
 
         return resp.aiMessage().text();

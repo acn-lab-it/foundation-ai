@@ -1,5 +1,5 @@
 package com.accenture.claims.ai.adapter.inbound.rest.claimstepbystep;// Java
-import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
+
 import io.quarkus.mongodb.panache.PanacheMongoRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -10,15 +10,15 @@ public class ClaimSubmissionProgressRepository implements PanacheMongoRepository
         return find("sessionId", sessionId).firstResult();
     }
 
-    public void upsertBySessionId(String sessionId, EmailParsingResult res) {
+    public void upsertBySessionId(String sessionId, ParsingResult res) {
         var existing = findBySessionId(sessionId);
         if (existing != null) {
-            existing.setEmailParsingResult(res);
+            existing.setParsingResult(res);
             update(existing);
         } else {
             var doc = new ClaimSubmissionProgress();
             doc.setSessionId(sessionId);
-            doc.setEmailParsingResult(res);
+            doc.setParsingResult(res);
             persist(doc);
         }
     }

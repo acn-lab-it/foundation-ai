@@ -1,7 +1,8 @@
 package com.accenture.claims.ai.adapter.inbound.rest.claimstepbystep;
 
-import com.arjuna.ats.jta.exceptions.NotImplementedException;
+import jakarta.enterprise.context.ApplicationScoped;
 
+@ApplicationScoped
 public class NextStepAdapter implements NextStep{
     public ClaimSubmissionStep nextStep(ClaimSubmissionProgress progress) {
         for(ClaimSubmissionStep step : ClaimSubmissionStep.values()){

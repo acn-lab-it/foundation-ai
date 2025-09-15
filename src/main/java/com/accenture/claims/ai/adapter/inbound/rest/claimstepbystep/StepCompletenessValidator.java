@@ -1,7 +1,5 @@
 package com.accenture.claims.ai.adapter.inbound.rest.claimstepbystep;
 
-import com.accenture.claims.ai.domain.model.emailParsing.EmailParsingResult;
-
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +29,7 @@ public interface StepCompletenessValidator {
 
     default boolean isComplete(ClaimSubmissionProgress progress) {
         if (progress == null) return false;
-        EmailParsingResult epr = progress.getEmailParsingResult();
+        ParsingResult epr = progress.getParsingResult();
         if (epr == null) return false;
         return isOwnFieldsNotBlank(progress) && isStepSpecificComplete(progress);
     }
@@ -47,18 +45,18 @@ public interface StepCompletenessValidator {
     default boolean isFieldBlank(String fieldName, ClaimSubmissionProgress progress) {
         String getter = "get" + Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
         try {
-            var m = progress.getEmailParsingResult().getClass().getMethod(getter);
-            Object attribute = m.invoke(progress.getEmailParsingResult());
+            var m = progress.getParsingResult().getClass().getMethod(getter);
+            Object attribute = m.invoke(progress.getParsingResult());
             if (attribute == null) {
-                return false;
+                return true;
             }
             if (attribute instanceof String s && s.isBlank()) {
-                return false;
+                return true;
             }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
-        return true;
+        return false;
     }
 
 }

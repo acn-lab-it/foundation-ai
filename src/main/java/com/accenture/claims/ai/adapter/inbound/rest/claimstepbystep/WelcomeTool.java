@@ -1,14 +1,14 @@
-package com.accenture.claims.ai.application.tool;
+package com.accenture.claims.ai.adapter.inbound.rest.claimstepbystep;
 
-import com.accenture.claims.ai.adapter.inbound.rest.FnolResource;
-import com.accenture.claims.ai.adapter.inbound.rest.claimstepbystep.ClaimSubmissionProgressRepository;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.outbound.persistence.repository.PolicyRepositoryAdapter;
+import com.accenture.claims.ai.domain.model.AdministrativeCheck;
 import com.accenture.claims.ai.domain.model.ContactChannel;
 import com.accenture.claims.ai.domain.model.Policy;
 import com.accenture.claims.ai.domain.model.PolicyHolder;
 import com.accenture.claims.ai.domain.model.emailParsing.Contacts;
 import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -26,8 +26,11 @@ public class WelcomeTool {
     LanguageHelper languageHelper;
     @Inject
     ClaimSubmissionProgressRepository claimSubmissionProgressRepository;
+    @Inject
+    ChatModel chatModel;
 
-    public FnolResource.ChatResponseDto welcomeMsg(String formPolicyNumber, String formUserEmailAddress, String acceptLanguage, String sessionId) throws BadRequestException {
+
+    public String welcomeMsg(String formPolicyNumber, String formUserEmailAddress, String acceptLanguage, String sessionId) throws BadRequestException {
         Optional<Policy> policyNumber = policyRepositoryAdapter.findByPolicyNumber(formPolicyNumber);
         String fullName = "";
         if (policyNumber.isEmpty()) {
@@ -52,22 +55,26 @@ public class WelcomeTool {
         //TODO LanguageHelper.PromptResult promptResult = languageHelper.getPromptWithLanguage(acceptLanguage, "superAgent.welcomePrompt");
         String prompt = """
                 Sei HappyClaim, un assistente virtuale che guida l'utente nel registrare dei claim all'interno del sistema Allianz.
-                Presentati, saluta e chiedi indirizzo completissimo e data esattissima dell'evento che si vuole segnalare.
-                L'utente si chiama {{fullName}}, la sua polizza è la {{policyNumber}} e l'id sessione è {{sessionId}}
-                Rispondi in questa lingua {{acceptLanguage}}
+                Presentati, saluta e chiedi indirizzo completo (stato, città, indirizzo e numero civico) e data esatta (giorno, ora e minuti) dell'evento che si vuole segnalare.
+                L'utente si chiama {{fullName}}, la sua polizza è la {{policyNumber}} e l'id sessione è {{sessionId}}.
+                I dati necessari serviranno a compilare queste informazioni {{fields}}
+                Rispondi in questa lingua: {{language}}
                 """;
 
         String systemPrompt = languageHelper.applyVariables(prompt, Map.of(
                 "sessionId", sessionId,
                 "fullName", fullName,
                 "policyNumber", policy.getPolicyNumber(),
-                "acceptLanguage", acceptLanguage));
+                "fields", String.join(", ", ClaimSubmissionStep.WHEN_AND_WHERE.getOwnedFields()),
+                "language", acceptLanguage
+        ));
 
-        saveJsonOutput(sessionId, retrievePolicyHolder); //TODO
-        return new FnolResource.ChatResponseDto(sessionId, systemPrompt, null);
+        saveJsonOutput(sessionId, policy, retrievePolicyHolder);
+
+        return chatModel.chat(systemPrompt);
     }
 
-    private void saveJsonOutput(String sessionId, PolicyHolder policyHolder) {
+    private void saveJsonOutput(String sessionId, Policy policy, PolicyHolder policyHolder) {
         var progress = claimSubmissionProgressRepository.findBySessionId(sessionId).getParsingResult();
         Reporter reporter = new Reporter();
         progress.setReporter(reporter);
@@ -79,6 +86,9 @@ public class WelcomeTool {
         Optional<ContactChannel> mobile = policyHolder.getContactChannels().stream().filter(val -> StringUtils.equalsIgnoreCase("MOBILE", val.getCommunicationType())).findFirst();
         email.ifPresent(contactChannel -> contacts.setEmail(contactChannel.getCommunicationDetails()));
         mobile.ifPresent(contactChannel -> contacts.setMobile(contactChannel.getCommunicationDetails()));
+        var check = new AdministrativeCheck();
+        check.setPassed(policy.getPolicyStatus().equalsIgnoreCase("ACTIVE"));
+        progress.setAdministrativeCheck(check);
         claimSubmissionProgressRepository.upsertBySessionId(sessionId, progress);
     }
 
