@@ -13,17 +13,17 @@ public enum ClaimSubmissionStep {
     /**
      * WHEN step owns: incidentDate (and potentially incidentLocation in the future if needed).
      */
-    WHEN(new StepWhenValidatorAdapter(), list("incidentDate")),
+    WHEN_AND_WHERE(new StepWhenValidatorAdapter(), list("incidentDate", "incidentLocation")),
 
     /**
      * WHAT step owns: circumstances, whatHappenedCode, whatHappenedContext.
      */
-    WHAT(new StepWhatValidatorAdapter(), list("circumstances", "whatHappenedCode", "whatHappenedContext")),
+    WHAT(new StepWhatValidatorAdapter(), list("circumstances", "whatHappenedCode", "whatHappenedContext", "uploadedMedia")),
 
     /**
      * DOCUMENT_UPLOAD step owns: uploadedMedia.
      */
-    DOCUMENT_UPLOAD(new StepDocumentUploadValidatorAdapter(), list("uploadedMedia"));
+    DOCUMENT_UPLOAD(new StepDocumentUploadValidatorAdapter(), list());
 
     private final StepCompletenessValidator validator;
     private final List<String> ownedFields;

@@ -9,7 +9,7 @@ public class StepWhenValidatorAdapter implements StepCompletenessValidator {
     }
 
     public ClaimSubmissionStep getStep() {
-        return ClaimSubmissionStep.WHEN;
+        return ClaimSubmissionStep.WHEN_AND_WHERE;
     }
 
     public List<String> getStepSpecificIncompleteFields(ClaimSubmissionProgress progress) {
