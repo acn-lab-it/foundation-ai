@@ -14,8 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-@Path("/api/fnol/chat")
-@Consumes(MediaType.APPLICATION_JSON)
+@Path("/api/old/fnol/chat")
+@Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
 @RequiredArgsConstructor
 public class FnolClaimFormResource {

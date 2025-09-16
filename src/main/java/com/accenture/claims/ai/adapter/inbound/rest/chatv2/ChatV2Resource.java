@@ -1385,9 +1385,22 @@ public class ChatV2Resource {
     }
 
     private String generateStep2WelcomeMessage(String acceptLanguage) {
-        return "Perfetto! Ho raccolto le informazioni su dove e quando è successo l'incidente. " +
-               "Ora ho bisogno di sapere cosa è successo. Puoi descrivermi l'incidente in dettaglio? " +
-               "Se hai foto o video, puoi allegarli per aiutarmi a capire meglio la situazione.";
+        // @todo: tradurre con genAI
+        switch (acceptLanguage != null ? acceptLanguage.toLowerCase() : "it") {
+            case "en":
+                return "Perfect! I've collected the information about where and when the incident happened. " +
+                       "Now I need to know what happened. Can you describe the incident in detail? " +
+                       "If you have photos or videos, you can attach them to help me better understand the situation.";
+            case "de":
+                return "Perfekt! Ich habe die Informationen darüber gesammelt, wo und wann der Vorfall passiert ist. " +
+                       "Jetzt muss ich wissen, was passiert ist. Können Sie mir den Vorfall im Detail beschreiben? " +
+                       "Wenn Sie Fotos oder Videos haben, können Sie diese anhängen, um mir zu helfen, die Situation besser zu verstehen.";
+            case "it":
+            default:
+                return "Perfetto! Ho raccolto le informazioni su dove e quando è successo l'incidente. " +
+                       "Ora ho bisogno di sapere cosa è successo. Puoi descrivermi l'incidente in dettaglio? " +
+                       "Se hai foto o video, puoi allegarli per aiutarmi a capire meglio la situazione.";
+        }
     }
 
 }
