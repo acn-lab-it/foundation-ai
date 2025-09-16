@@ -54,7 +54,9 @@ for coll in "${collections[@]:-}"; do
   # Escape EOF content safely
   {
     echo "const c = '$collJs';"
-    echo "const raw = `cat <<'JSON_EOF'"; echo "$rawContent"; echo "JSON_EOF`;"
+    echo "const raw = \`"
+    printf '%s' "$rawContent"
+    echo "\`;"
     echo "db = db.getSiblingDB('$dbJs');"
     echo "db.getCollection(c).drop();"
     echo "let docs;"

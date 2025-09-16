@@ -375,6 +375,17 @@ mongodb://IL_TUO_USER:LA_TUA_PW@<NOME_HOST>:27017
 
 ## DB versioning and sync (MongoDB)
 
+### Git pre-commit hook to export db/collections
+To keep db/collections up to date on every commit, this repo provides a pre-commit hook in .githooks/pre-commit that runs db/scripts/export and stages the exported JSON files.
+
+Setup (run once per clone):
+- Windows PowerShell: .\scripts\setup-githooks.ps1
+- Or manually: git config core.hooksPath .githooks
+
+After setup, on each commit the hook will:
+- run db/scripts/export.sh (or export.ps1 via WSL) to export collections
+- git add db/collections so they are included in the commit
+
 We keep versioned collection snapshots and scripts under db/.
 - Collections JSON: db/collections/*.json
 - Init/Migrations: db/init/*.js (executed in order by seed.ps1)
