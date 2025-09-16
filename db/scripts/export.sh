@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 # Determine project root as the directory containing this script's parent folder
@@ -38,7 +37,7 @@ fi
 if [[ $# -gt 0 ]]; then
   collections=("$@")
 else
-  collections=(policy whathappened prompts chat_memory email_parsing_result final_output_json)
+  collections=(policy whathappened prompts)
 fi
 
 EXPORT_DIR="$PROJECT_ROOT/../db/collections"
