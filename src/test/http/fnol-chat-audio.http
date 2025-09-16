@@ -1,0 +1,40 @@
+### Send a vocal message to the FNOL chat endpoint
+POST http://localhost:8080/fnol/chat
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+Accept-Language: en
+
+--WebAppBoundary
+Content-Disposition: form-data; name="userMessage"
+
+"The policy is"
+--WebAppBoundary
+Content-Disposition: form-data; name="userAudioMessage"; filename="policy_ai_converted.wav"
+Content-Type: audio/wav
+
+< ../resources/policy_ai_converted.wav
+--WebAppBoundary--
+
+### Notes:
+# This HTTP request sends a multipart form with:
+# 1. A text message "Hello, I need to check my policy"
+# 2. An audio file containing the message "the policy number is AUTHHR00026397"
+#
+# IMPORTANT: Before using this file, make sure the application is running:
+#
+# 1. Start the application in a terminal:
+#    cd /Users/francesco.stumpo/IdeaProjects/Allianz/bmp/foundation-ai
+#    ./mvnw quarkus:dev
+#
+# 2. Wait for the application to fully start (you should see a message like "Listening on: http://localhost:8080")
+#
+# 3. Click the green "Run" button next to the request in IntelliJ
+#
+# 4. The response should contain:
+#    - A session ID
+#    - The AI assistant's response acknowledging the policy number
+#    - Possibly additional information about the policy if it exists in the system
+#
+# 5. If you encounter issues:
+#    - Make sure the application is running on port 8080
+#    - Check the application logs for any errors
+#    - Verify that the audio file exists at src/test/resources/policy_ai_converted.wav

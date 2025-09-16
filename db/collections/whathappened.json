@@ -1,1 +1,356 @@
-[]
+[
+  {
+    "_id": "688265274401be8ee789b041",
+    "whatHappenCode": "EDM",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Fenomeno Elettrico"
+  },
+  {
+    "_id": "688265274401be8ee789b042",
+    "whatHappenCode": "GB",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Danni accidentali ai Vetri"
+  },
+  {
+    "_id": "688265274401be8ee789b043",
+    "whatHappenCode": "MLO",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Eccedenza consumo d'acqua"
+  },
+  {
+    "_id": "688265274401be8ee789b044",
+    "whatHappenCode": "TLB",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Rischio Locativo"
+  },
+  {
+    "_id": "688265274401be8ee789b045",
+    "whatHappenCode": "FIR",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Incendio e fumo"
+  },
+  {
+    "_id": "688265274401be8ee789b046",
+    "whatHappenCode": "LTN",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Azione diretta del fulmine"
+  },
+  {
+    "_id": "688265274401be8ee789b047",
+    "whatHappenCode": "EXP",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Esplosione, Implosione"
+  },
+  {
+    "_id": "688265274401be8ee789b048",
+    "whatHappenCode": "SOW",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Onda Sonica"
+  },
+  {
+    "_id": "688265274401be8ee789b049",
+    "whatHappenCode": "FOJ",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "ani"
+  },
+  {
+    "_id": "688265274401be8ee789b04a",
+    "whatHappenCode": "IGV",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Urto di Veicolo Stradale"
+  },
+  {
+    "_id": "688265274401be8ee789b04b",
+    "whatHappenCode": "IWV",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Urto di Natante"
+  },
+  {
+    "_id": "688265274401be8ee789b04c",
+    "whatHappenCode": "IAV",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Urto di Aereoveicolo"
+  },
+  {
+    "_id": "688265274401be8ee789b04d",
+    "whatHappenCode": "ESW",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Fuoriuscita di Acqua e Altri Liquidi"
+  },
+  {
+    "_id": "688265274401be8ee789b04e",
+    "whatHappenCode": "ESG",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Fuoriuscita di gas"
+  },
+  {
+    "_id": "688265274401be8ee789b04f",
+    "whatHappenCode": "NTV",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Eventi Atmosferici"
+  },
+  {
+    "_id": "688265274401be8ee789b050",
+    "whatHappenCode": "NTV",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Allagamento"
+  },
+  {
+    "_id": "688265274401be8ee789b051",
+    "whatHappenCode": "RIO",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Tumulto popolare / Sommosse"
+  },
+  {
+    "_id": "688265274401be8ee789b052",
+    "whatHappenCode": "VMA",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Atti Vandalici / Dolosi"
+  },
+  {
+    "_id": "688265274401be8ee789b053",
+    "whatHappenCode": "TER",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Terrorismo"
+  },
+  {
+    "_id": "688265274401be8ee789b054",
+    "whatHappenCode": "BUR",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Furto/Tentato furto in casa - Guasti Ladri e Furto Porte/Finestre"
+  },
+  {
+    "_id": "688265274401be8ee789b055",
+    "whatHappenCode": "ROB",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Rapina in casa"
+  },
+  {
+    "_id": "688265274401be8ee789b056",
+    "whatHappenCode": "FRA",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Truffa in casa"
+  },
+  {
+    "_id": "688265274401be8ee789b057",
+    "whatHappenCode": "THE",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Furto all'esterno dell'abitazione"
+  },
+  {
+    "_id": "688265274401be8ee789b058",
+    "whatHappenCode": "ROE",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Rapina all'esterno dell'abitazione"
+  },
+  {
+    "_id": "688265274401be8ee789b059",
+    "whatHappenCode": "EART",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Terremoto"
+  },
+  {
+    "_id": "688265274401be8ee789b05a",
+    "whatHappenCode": "FLOO",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Alluvione e Inondazione"
+  },
+  {
+    "_id": "688265274401be8ee789b05b",
+    "whatHappenCode": "ACC",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Infortunio"
+  },
+  {
+    "_id": "688265274401be8ee789b05c",
+    "whatHappenCode": "ILL",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Malattia"
+  },
+  {
+    "_id": "688265274401be8ee789b05d",
+    "whatHappenCode": "PREG",
+    "claimClassGroup": "OWNDAMAGE",
+    "whatHappenedContext": "Parto Cesareo"
+  },
+  {
+    "_id": "688265274401be8ee789b05e",
+    "whatHappenCode": "ACMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "RC- Vita Privata"
+  },
+  {
+    "_id": "688265274401be8ee789b05f",
+    "whatHappenCode": "BEL",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "RC- Infortunio collaboratore domestico/familiare"
+  },
+  {
+    "_id": "688265274401be8ee789b060",
+    "whatHappenCode": "IUL",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "RC - Minori sui social network"
+  },
+  {
+    "_id": "688265274401be8ee789b061",
+    "whatHappenCode": "LLMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "RC - Affittacamere e BeB"
+  },
+  {
+    "_id": "688265274401be8ee789b062",
+    "whatHappenCode": "PLOFM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b063",
+    "whatHappenCode": "PLUFM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Conduzione"
+  },
+  {
+    "_id": "688265274401be8ee789b064",
+    "whatHappenCode": "PLOWM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b065",
+    "whatHappenCode": "PLUWM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Conduzione"
+  },
+  {
+    "_id": "688265274401be8ee789b066",
+    "whatHappenCode": "PLOAM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b067",
+    "whatHappenCode": "PLUAM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Conduzione"
+  },
+  {
+    "_id": "688265274401be8ee789b068",
+    "whatHappenCode": "DOMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b069",
+    "whatHappenCode": "DHMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Custodia"
+  },
+  {
+    "_id": "688265274401be8ee789b06a",
+    "whatHappenCode": "HOMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b06b",
+    "whatHappenCode": "HHMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Custodia"
+  },
+  {
+    "_id": "688265274401be8ee789b06c",
+    "whatHappenCode": "AOMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b06d",
+    "whatHappenCode": "AHMD",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Custodia"
+  },
+  {
+    "_id": "688265274401be8ee789b06e",
+    "whatHappenCode": "ELOFM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b06f",
+    "whatHappenCode": "ELUFM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Conduzione"
+  },
+  {
+    "_id": "688265274401be8ee789b070",
+    "whatHappenCode": "ELOWM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b071",
+    "whatHappenCode": "ELUWM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Conduzione"
+  },
+  {
+    "_id": "688265274401be8ee789b072",
+    "whatHappenCode": "ELOAM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Proprietà"
+  },
+  {
+    "_id": "688265274401be8ee789b073",
+    "whatHappenCode": "ELUAM",
+    "claimClassGroup": "LIABILITY",
+    "whatHappenedContext": "Conduzione"
+  },
+  {
+    "_id": "688265274401be8ee789b074",
+    "whatHappenCode": "LPOB",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Controversie relative alla Casa"
+  },
+  {
+    "_id": "688265274401be8ee789b075",
+    "whatHappenCode": "LPPL",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Controversie relative alla Famiglia"
+  },
+  {
+    "_id": "688265274401be8ee789b076",
+    "whatHappenCode": "LPEM",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Estensione Controversie con il Datore di Lavoro"
+  },
+  {
+    "_id": "688265274401be8ee789b077",
+    "whatHappenCode": "LPEB",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Estensione Controversie abitazioni di proprietà non Locate"
+  },
+  {
+    "_id": "688265274401be8ee789b078",
+    "whatHappenCode": "LPTA",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Controversie relative ai veicoli guidati con patente - incidente"
+  },
+  {
+    "_id": "688265274401be8ee789b079",
+    "whatHappenCode": "LPNTA",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Controversie relative ai veicoli guidati con patente - senza incidente"
+  },
+  {
+    "_id": "688265274401be8ee789b07a",
+    "whatHappenCode": "LPGC",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Risarcimento garantito"
+  },
+  {
+    "_id": "688265274401be8ee789b07b",
+    "whatHappenCode": "LPCR",
+    "claimClassGroup": "LEGAL",
+    "whatHappenedContext": "Rimborsi Complementari per veicoli guidati con patente"
+  }
+]

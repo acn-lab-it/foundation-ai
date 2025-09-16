@@ -134,8 +134,14 @@ db.getSiblingDB("admin").createUser({
   user: "IL_TUO_USER",
   pwd:  "LA_TUA_PW",
   roles: [ { role: "root", db: "admin"} ]
-})
+});
 '
+```
+
+e.g.
+
+```bash
+mongosh --quiet --eval 'db.getSiblingDB("admin").createUser({ user: "admin", pwd: "SecurePassword", roles: [ { role: "root", db: "admin"} ]});'
 ```
 
 ## Note Importanti
@@ -369,25 +375,67 @@ mongodb://IL_TUO_USER:LA_TUA_PW@<NOME_HOST>:27017
 
 ## DB versioning and sync (MongoDB)
 
+### Git pre-commit hook to export db/collections
+To keep db/collections up to date on every commit, this repo provides a pre-commit hook in .githooks/pre-commit that runs db/scripts/export and stages the exported JSON files.
+
+Setup (run once per clone):
+- Windows PowerShell: .\scripts\setup-githooks.ps1
+- Or manually: git config core.hooksPath .githooks
+
+After setup, on each commit the hook will:
+- run db/scripts/export.sh (or export.ps1 via WSL) to export collections
+- git add db/collections so they are included in the commit
+
 We keep versioned collection snapshots and scripts under db/.
 - Collections JSON: db/collections/*.json
 - Init/Migrations: db/init/*.js (executed in order by seed.ps1)
-- Scripts (PowerShell):
-  - Export live DB to repo: db\scripts\export.ps1
-  - Import repo JSON into DB: db\scripts\import.ps1
-  - Apply init scripts: db\scripts\seed.ps1
+- Scripts:
+  - Bash (primary): db\scripts\export.sh, db\scripts\import.sh, db\scripts\seed.sh
+  - PowerShell (wrappers on Windows via WSL): db\scripts\export.ps1, db\scripts\import.ps1, db\scripts\seed.ps1
 
 Defaults
 - Mongo URI: mongodb://localhost:27017 (override with env MONGO_URI)
 - Database name: read from src\main\resources\application.properties quarkus.mongodb.database or env MONGO_DB
 
-Examples (PowerShell)
-- .\db\scripts\export.ps1
-- .\db\scripts\import.ps1
-- .\db\scripts\seed.ps1
+Examples
+- Linux/WSL:
+  - ./db/scripts/export.sh
+  - ./db/scripts/import.sh
+  - ./db/scripts/seed.sh
+- Windows (PowerShell wrappers → WSL):
+  - .\db\scripts\export.ps1
+  - .\db\scripts\import.ps1
+  - .\db\scripts\seed.ps1
 
 Filter specific collections
 - Export only policy and prompts:
   - .\db\scripts\export.ps1 -Collections policy,prompts
 - Import only prompts:
   - .\db\scripts\import.ps1 -Collections prompts
+
+
+## Rigenerare le classi MapStruct (EmailParsingResultMapperImpl)
+
+Se modifichi i DTO/Entity o l'interfaccia del mapper (es. EmailParsingResultMapper), l'implementazione generata da MapStruct (es. EmailParsingResultMapperImpl) viene rigenerata automaticamente durante la compilazione.
+
+Come forzare la rigenerazione:
+- Da terminale (consigliato):
+  - Windows: `mvnw.cmd clean compile -DskipTests`
+  - Linux/Mac: `./mvnw clean compile -DskipTests`
+- In Quarkus dev mode: lancia `mvnw quarkus:dev` e salva i file: Quarkus ricompila e rigenera i mapper al volo.
+
+Requisiti già presenti in questo progetto:
+- dipendenze `org.mapstruct:mapstruct` e `org.mapstruct:mapstruct-processor`
+- configurazione di annotation processing nel `maven-compiler-plugin`
+- `componentModel = "cdi"` nei mapper per l'integrazione con Quarkus/Arc
+
+Dove trovare le classi generate:
+- `target/generated-sources/annotations/.../EmailParsingResultMapperImpl.java`
+
+Se la classe non si rigenera:
+- Assicurati che il build compili senza errori; MapStruct genera le classi solo se la compilazione va a buon fine.
+- Controlla i warning di MapStruct su proprietà non mappate e aggiungi mapping espliciti o ignora se volontario.
+- Verifica che l'IDE abbia abilitato l'Annotation Processing (IntelliJ: Settings → Build Tools → Maven/Gradle e Compiler → Annotation Processors → Enable).
+
+Esempio di warning atteso durante la compilazione (non blocca il build):
+- Unmapped target property: "contacts" in `Reporter`. Aggiungi un mapping, oppure ignora se non necessario.

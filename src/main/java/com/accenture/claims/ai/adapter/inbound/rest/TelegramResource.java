@@ -7,16 +7,16 @@ import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageConte
 import com.accenture.claims.ai.application.agent.FNOLAssistantAgent;
 import com.accenture.claims.ai.config.TelegramBotConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.*;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.UUID;
 
 /**
  * Resource for handling Telegram webhook requests.
@@ -63,7 +63,7 @@ public class TelegramResource {
         if (!telegramBotConfig.isChatIdAllowed(chatId)) {
             // Return access denied response
             TelegramResponse accessDeniedResponse = TelegramResponse.createSendMessageResponse(
-                    chatId, "Access denied. You are not authorized to use this bot.");
+                chatId, "Access denied. You are not authorized to use this bot.");
             return Response.ok(accessDeniedResponse).build();
         }
 
@@ -122,7 +122,7 @@ public class TelegramResource {
 
                 // Format as media file for the agent
                 userMessage = (userMessage != null ? userMessage : "") +
-                        "\n\n[MEDIA_FILES]\n" + mediaFile.toString() + "\n[/MEDIA_FILES]";
+                              "\n\n[MEDIA_FILES]\n" + mediaFile.toString() + "\n[/MEDIA_FILES]";
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"document_processing_failure\"}")

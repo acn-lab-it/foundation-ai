@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pre-commit hook to export MongoDB collections so db/collections is always up to date
+set -euo pipefail
+
+# Determine project root (this file is in .githooks)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Prefer bash export script if available
+if [ -x "$PROJECT_ROOT/db/scripts/export.sh" ]; then
+  echo "[pre-commit] Running db/scripts/export.sh..."
+  "$PROJECT_ROOT/db/scripts/export.sh"
+else
+  echo "[pre-commit] export.sh not executable or missing, trying PowerShell wrapper via WSL..."
+  if command -v pwsh >/dev/null 2>&1; then
+    pwsh -NoProfile -File "$PROJECT_ROOT/db/scripts/export.ps1"
+  elif command -v powershell >/dev/null 2>&1; then
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$PROJECT_ROOT/db/scripts/export.ps1"
+  else
+    echo "[pre-commit][WARN] Neither bash nor PowerShell available to run export. Skipping." >&2
+  fi
+fi
+
+# Add exported files to the commit
+if [ -d "$PROJECT_ROOT/db/collections" ]; then
+  git add -A db/collections
+fi
