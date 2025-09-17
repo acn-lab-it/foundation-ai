@@ -16,7 +16,10 @@ import jakarta.inject.Inject;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class ChatV2CoverageVerifierV2 {
@@ -188,20 +191,25 @@ public class ChatV2CoverageVerifierV2 {
                 if (languageHelper != null) {
                     LanguageHelper.PromptResult p = languageHelper.getPromptWithLanguage(lang, "fnol.coverage.verificationPrompt");
                     if (p != null && p.prompt != null && !p.prompt.isBlank()) {
-                        sys = languageHelper.applyVariables(p.prompt, Map.of(
-                                "policyNumber", policyNumber,
-                                "damageType", damageType,
-                                "damageDetails", damageDetails
-                        ));
+                        sys = p.prompt;
                     }
                 }
             } catch (Exception ignore) {
                 // usa fallback
             }
 
+            sys = languageHelper.applyVariables(sys, Map.of(
+                    "policyNumber", policyNumber,
+                    "damageType", damageType,
+                    "damageDetails", damageDetails
+            ));
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(List.of(
                             SystemMessage.from(sys),
+                            SystemMessage.from("""
+                                    Ritorna un boolean: true se coerente con la polizza (MULTIRISK copre tutto tranne MOTOR), altrimenti false.
+                                    
+                                    """),
                             UserMessage.from("Verifica se il danno è coperto dalla polizza.")
                     ))
                     .build();
@@ -248,16 +256,18 @@ public class ChatV2CoverageVerifierV2 {
                 if (languageHelper != null) {
                     LanguageHelper.PromptResult p = languageHelper.getPromptWithLanguage(lang, "fnol.coverage.fullVerificationPrompt");
                     if (p != null && p.prompt != null && !p.prompt.isBlank()) {
-                        sys = languageHelper.applyVariables(p.prompt, Map.of(
-                                "policyNumber", policyNumber,
-                                "incidentDate", incidentDate,
-                                "damageType", damageType
-                        ));
+                        sys = p.prompt;
                     }
                 }
             } catch (Exception ignore) {
                 // usa fallback
             }
+
+            sys = languageHelper.applyVariables(sys, Map.of(
+                    "policyNumber", policyNumber,
+                    "incidentDate", incidentDate,
+                    "damageType", damageType
+            ));
 
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(List.of(
