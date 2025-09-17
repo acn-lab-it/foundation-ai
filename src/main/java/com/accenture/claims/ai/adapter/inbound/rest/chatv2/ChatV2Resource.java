@@ -1,12 +1,12 @@
 package com.accenture.claims.ai.adapter.inbound.rest.chatv2;
 
+import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
+import com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools.*;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
-import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
 import com.accenture.claims.ai.application.tool.WelcomeTool;
-import com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -36,7 +36,8 @@ public class ChatV2Resource {
     FinalOutputJSONStore finalOutputJSONStore;
     @Inject
     WelcomeTool welcomeTool;
-
+    @Inject
+    ChatV2DamageDetailsV2 chatV2DamageDetailsV2;
     // ChatV2 specific tools
     @Inject
     ChatV2WelcomeToolV2 chatV2WelcomeTool;
@@ -314,7 +315,9 @@ public class ChatV2Resource {
             
             // Salva SEMPRE i dati estratti (anche parziali)
             saveStep2Data(sessionId, extractedData);
-            
+
+            chatV2DamageDetailsV2.runOcr(sessionId, userMessage);
+
             // Processa eventuali media con ChatV2MediaOcrAgentV2 PRIMA della validazione
             System.out.println("DEBUG: Checking for media files in extractedData: " + extractedData.containsKey("mediaFiles"));
             if (extractedData.containsKey("mediaFiles")) {

@@ -82,45 +82,6 @@ public class ChatV2CoverageVerifierV2 {
         return result;
     }
 
-    @Tool("Check if damage type is covered by policy")
-    public boolean isDamageTypeCoveredV2(String policyNumber, String whatHappenedCode, String damageDetails) {
-        try {
-            // Verifica base: se abbiamo un codice valido
-            if (whatHappenedCode == null || whatHappenedCode.equals("UNKNOWN")) {
-                return false;
-            }
-
-            // Verifica con AI se il tipo di danno è coperto
-            return verifyDamageTypeWithAI(policyNumber, whatHappenedCode, damageDetails);
-
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    @Tool("Get policy coverage details")
-    public Map<String, Object> getPolicyCoverageDetailsV2(String policyNumber) {
-        Map<String, Object> result = new HashMap<>();
-        
-        try {
-            return policyRepository.findByPolicyNumber(policyNumber)
-                    .map(policy -> {
-                        result.put("policyNumber", policy.getPolicyNumber());
-                        result.put("beginDate", policy.getBeginDate().toString());
-                        result.put("endDate", policy.getEndDate().toString());
-                        result.put("status", policy.getPolicyStatus());
-                        result.put("coverageType", policy.getProductReference() != null ? 
-                                policy.getProductReference().getCode() : "UNKNOWN");
-                        return result;
-                    })
-                    .orElse(Map.of("error", "Polizza non trovata"));
-
-        } catch (Exception e) {
-            result.put("error", "Errore nel recupero dettagli polizza: " + e.getMessage());
-            return result;
-        }
-    }
-
     private boolean verifyDateCoverage(String policyNumber, String incidentDate) {
         try {
             return policyRepository.findByPolicyNumber(policyNumber)

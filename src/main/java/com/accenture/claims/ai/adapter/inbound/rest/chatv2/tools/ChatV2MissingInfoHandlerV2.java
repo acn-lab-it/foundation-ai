@@ -11,7 +11,10 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class ChatV2MissingInfoHandlerV2 {
@@ -151,7 +154,6 @@ public class ChatV2MissingInfoHandlerV2 {
         // Verifica campi obbligatori per step 2
         boolean hasIncidentType = data.containsKey("whatHappenedCode") && data.get("whatHappenedCode") != null;
         boolean hasIncidentContext = data.containsKey("whatHappenedContext") && data.get("whatHappenedContext") != null;
-        boolean hasImagesUploaded = data.containsKey("imagesUploaded") && data.get("imagesUploaded") != null;
         boolean hasCircumstances = data.containsKey("circumstances") && data.get("circumstances") != null;
         boolean hasDamageDetails = data.containsKey("damageDetails") && data.get("damageDetails") != null;
         
@@ -160,9 +162,6 @@ public class ChatV2MissingInfoHandlerV2 {
         }
         if (!hasIncidentContext) {
             missingFields.add("contesto incidente");
-        }
-        if (!hasImagesUploaded) {
-            missingFields.add("media allegati");
         }
         if (!hasCircumstances) {
             missingFields.add("circostanze dell'incidente");
@@ -173,13 +172,11 @@ public class ChatV2MissingInfoHandlerV2 {
         
         confidence.put("incidentType", hasIncidentType ? 1.0 : 0.0);
         confidence.put("incidentContext", hasIncidentContext ? 1.0 : 0.0);
-        confidence.put("imagesUploaded", hasImagesUploaded ? 1.0 : 0.0);
         confidence.put("circumstances", hasCircumstances ? 1.0 : 0.0);
         confidence.put("damageDetails", hasDamageDetails ? 1.0 : 0.0);
         
-        System.out.println("DEBUG: Step2 validation - hasIncidentType: " + hasIncidentType + 
-                          ", hasImagesUploaded: " + hasImagesUploaded + 
-                          ", hasCircumstances: " + hasCircumstances + 
+        System.out.println("DEBUG: Step2 validation - hasIncidentType: " + hasIncidentType +
+                ", hasCircumstances: " + hasCircumstances +
                           ", hasDamageDetails: " + hasDamageDetails);
     }
 
