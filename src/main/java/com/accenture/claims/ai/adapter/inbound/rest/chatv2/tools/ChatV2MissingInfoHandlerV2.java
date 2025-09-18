@@ -151,12 +151,12 @@ public class ChatV2MissingInfoHandlerV2 {
     }
 
     private void validateStep2Data(Map<String, Object> data, List<String> missingFields, Map<String, Double> confidence) {
-        // Verifica campi obbligatori per step 2
-        boolean hasIncidentType = data.containsKey("whatHappenedCode") && data.get("whatHappenedCode") != null;
-        boolean hasIncidentContext = data.containsKey("whatHappenedContext") && data.get("whatHappenedContext") != null;
-        boolean hasCircumstances = data.containsKey("circumstances") && data.get("circumstances") != null;
-        boolean hasDamageDetails = data.containsKey("damageDetails") && data.get("damageDetails") != null;
-        
+        // Verifica campi obbligatori per step 2 considerando NONE/UNKNOWN come null
+        boolean hasIncidentType = !isNullish(data.get("whatHappenedCode"));
+        boolean hasIncidentContext = !isNullish(data.get("whatHappenedContext"));
+        boolean hasCircumstances = !isNullishCircumstances(data.get("circumstances"));
+        boolean hasDamageDetails = !isNullish(data.get("damageDetails"));
+
         if (!hasIncidentType) {
             missingFields.add("tipo di incidente");
         }
@@ -169,15 +169,40 @@ public class ChatV2MissingInfoHandlerV2 {
         if (!hasDamageDetails) {
             missingFields.add("dettagli del danno");
         }
-        
+
         confidence.put("incidentType", hasIncidentType ? 1.0 : 0.0);
         confidence.put("incidentContext", hasIncidentContext ? 1.0 : 0.0);
         confidence.put("circumstances", hasCircumstances ? 1.0 : 0.0);
         confidence.put("damageDetails", hasDamageDetails ? 1.0 : 0.0);
-        
+
         System.out.println("DEBUG: Step2 validation - hasIncidentType: " + hasIncidentType +
+                ", hasIncidentContext: " + hasIncidentContext +
                 ", hasCircumstances: " + hasCircumstances +
-                          ", hasDamageDetails: " + hasDamageDetails);
+                ", hasDamageDetails: " + hasDamageDetails);
+
+    }
+
+    private boolean isNullish(Object v) {
+        if (v == null) return true;
+        if (v instanceof CharSequence) {
+            String s = v.toString().trim();
+            if (s.isEmpty()) return true;
+            String up = s.toUpperCase(java.util.Locale.ROOT);
+            return "NULL".equals(up) || "NONE".equals(up) || "UNKNOWN".equals(up);
+        }
+        return false;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private boolean isNullishCircumstances(Object v) {
+        if (isNullish(v)) return true;
+        if (v instanceof Map map) {
+            Object details = map.get("details");
+            Object notes = map.get("notes");
+            // Considera assenti se entrambi vuoti/none/unknown
+            return isNullish(details) && isNullish(notes);
+        }
+        return false;
     }
 
     private double calculateAddressConfidence(Map<String, Object> data) {
@@ -275,14 +300,14 @@ public class ChatV2MissingInfoHandlerV2 {
 
     private String createSystemPrompt(String lang, String currentStep, List<String> missingFields, Map<String, Object> extractedData) {
         StringBuilder prompt = new StringBuilder();
-        
+
         if ("it".equals(lang)) {
             prompt.append("Sei un assistente di una compagnia assicurativa in una chat. ");
             prompt.append("Devi richiedere informazioni mancanti per la gestione di un sinistro. ");
             prompt.append("Sii cortese, professionale e diretto. ");
             prompt.append("NON usare firme email, saluti formali o chiusure come 'Cordiali saluti'. ");
             prompt.append("Il messaggio deve essere strutturato in due sezioni: cosa abbiamo già e cosa ci manca ancora.\n\n");
-            
+
             prompt.append("INFORMAZIONI GIÀ RACCOLTE:\n");
             boolean hasAnyInfo = false;
             if (extractedData.containsKey("incidentDate") && extractedData.get("incidentDate") != null) {
@@ -300,17 +325,17 @@ public class ChatV2MissingInfoHandlerV2 {
             if (!hasAnyInfo) {
                 prompt.append("Nessuna informazione raccolta finora.\n");
             }
-            
+
             prompt.append("\nINFORMAZIONI MANCANTI:\n");
             for (String field : missingFields) {
                 prompt.append("✗ ").append(field).append("\n");
             }
-            
+
             prompt.append("\nGenera un messaggio di chat che mostri chiaramente cosa abbiamo e cosa ci manca. ");
             prompt.append("IMPORTANTE: Se mostri date/ore, formattale in modo leggibile per l'utente italiano (es. '15 marzo 2024 alle 14:30' invece di '2024-03-15T14:30:00Z'). ");
             prompt.append("Usa un formato come:\n");
             prompt.append("'Ho già raccolto:\n• [lista di quello che abbiamo]\n\nPer procedere mi servono ancora:\n• [lista di quello che manca]'\n\n");
-            
+
             // Personalizza il messaggio in base allo step
             if ("step1".equals(currentStep)) {
                 prompt.append("Esempio per step1: 'Ho già raccolto:\n• Data dell'incidente: 15 marzo 2024\n\nPer procedere con la segnalazione mi servono ancora:\n• Indirizzo completo dell'incidente'");
@@ -319,14 +344,14 @@ public class ChatV2MissingInfoHandlerV2 {
             } else {
                 prompt.append("Esempio generico: 'Ho già raccolto:\n• [info disponibili]\n\nPer completare la segnalazione mi servono ancora:\n• [info mancanti]'");
             }
-            
+
         } else if ("de".equals(lang)) {
             prompt.append("Du bist ein Assistent einer Versicherungsgesellschaft in einem Chat. ");
             prompt.append("Du musst fehlende Informationen für die Schadensabwicklung anfordern. ");
             prompt.append("Sei höflich, professionell und direkt. ");
             prompt.append("VERWENDE KEINE E-Mail-Vorlagen, formelle Grüße oder Schlussformeln wie 'Mit freundlichen Grüßen'. ");
             prompt.append("Die Nachricht muss in zwei Abschnitte strukturiert sein: was wir bereits haben und was uns noch fehlt.\n\n");
-            
+
             prompt.append("BEREITS GESAMMELTE INFORMATIONEN:\n");
             boolean hasAnyInfo = false;
             if (extractedData.containsKey("incidentDate") && extractedData.get("incidentDate") != null) {
@@ -344,17 +369,17 @@ public class ChatV2MissingInfoHandlerV2 {
             if (!hasAnyInfo) {
                 prompt.append("Bisher keine Informationen gesammelt.\n");
             }
-            
+
             prompt.append("\nFEHLENDE INFORMATIONEN:\n");
             for (String field : missingFields) {
                 prompt.append("✗ ").append(field).append("\n");
             }
-            
+
             prompt.append("\nGeneriere eine Chat-Nachricht, die klar zeigt, was wir haben und was uns fehlt. ");
             prompt.append("WICHTIG: Wenn du Daten/Zeiten zeigst, formatiere sie lesbar für deutsche Benutzer (z.B. '15. März 2024 um 14:30' statt '2024-03-15T14:30:00Z'). ");
             prompt.append("Verwende ein Format wie:\n");
             prompt.append("'Ich habe bereits gesammelt:\n• [Liste dessen, was wir haben]\n\nUm fortzufahren benötige ich noch:\n• [Liste dessen, was fehlt]'\n\n");
-            
+
             // Personalizza il messaggio in base allo step
             if ("step1".equals(currentStep)) {
                 prompt.append("Beispiel für step1: 'Ich habe bereits gesammelt:\n• Schadensdatum: 15. März 2024\n\nUm mit der Schadensmeldung fortzufahren benötige ich noch:\n• Vollständige Adresse des Schadens'");
@@ -363,14 +388,14 @@ public class ChatV2MissingInfoHandlerV2 {
             } else {
                 prompt.append("Allgemeines Beispiel: 'Ich habe bereits gesammelt:\n• [verfügbare Infos]\n\nUm die Meldung abzuschließen benötige ich noch:\n• [fehlende Infos]'");
             }
-            
+
         } else {
             prompt.append("You are an assistant for an insurance company in a chat. ");
             prompt.append("You need to request missing information for claim processing. ");
             prompt.append("Be polite, professional and direct. ");
             prompt.append("DON'T use email templates, formal greetings or closings like 'Best regards'. ");
             prompt.append("The message must be structured in two sections: what we already have and what we still need.\n\n");
-            
+
             prompt.append("ALREADY COLLECTED INFORMATION:\n");
             boolean hasAnyInfo = false;
             if (extractedData.containsKey("incidentDate") && extractedData.get("incidentDate") != null) {
@@ -388,17 +413,17 @@ public class ChatV2MissingInfoHandlerV2 {
             if (!hasAnyInfo) {
                 prompt.append("No information collected yet.\n");
             }
-            
+
             prompt.append("\nMISSING INFORMATION:\n");
             for (String field : missingFields) {
                 prompt.append("✗ ").append(field).append("\n");
             }
-            
+
             prompt.append("\nGenerate a chat message that clearly shows what we have and what we're missing. ");
             prompt.append("IMPORTANT: If you show dates/times, format them in a readable way for English users (e.g. 'March 15, 2024 at 2:30 PM' instead of '2024-03-15T14:30:00Z'). ");
             prompt.append("Use a format like:\n");
             prompt.append("'I have already collected:\n• [list of what we have]\n\nTo proceed I still need:\n• [list of what's missing]'\n\n");
-            
+
             // Personalizza il messaggio in base allo step
             if ("step1".equals(currentStep)) {
                 prompt.append("Example for step1: 'I have already collected:\n• Incident date: March 15, 2024\n\nTo proceed with the claim I still need:\n• Complete incident address'");
@@ -408,7 +433,11 @@ public class ChatV2MissingInfoHandlerV2 {
                 prompt.append("Generic example: 'I have already collected:\n• [available info]\n\nTo complete the claim I still need:\n• [missing info]'");
             }
         }
-        
+
+        prompt.append("\n\n");
+        prompt.append("If the missing information is 'tipo di incidente' then you have to ask for more information about the incident context.");
+        prompt.append("Do not say 'tipo di incidente' in the answer, refer to it as 'incident context'.");
+
         return prompt.toString();
     }
 
