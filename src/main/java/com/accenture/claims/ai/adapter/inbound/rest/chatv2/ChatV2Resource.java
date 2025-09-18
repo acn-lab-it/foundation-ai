@@ -332,7 +332,7 @@ public class ChatV2Resource {
             reporter.setContacts(contacts);
         }
         
-        UploadPolicyResponse response = new UploadPolicyResponse(reporter, policyId, creationTimestamp, updateTimestamp);
+        UploadPolicyResponse response = new UploadPolicyResponse(reporter, request.getPolicyNumber(), creationTimestamp, updateTimestamp);
         Policy policy = new Policy();
         
         // Generate _id
