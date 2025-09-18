@@ -51,4 +51,26 @@ public class PolicyRepositoryAdapter implements PolicyRepository, PanacheMongoRe
         return find("policyNumber", policyNumber).firstResultOptional().map(policyMapper::toPolicy)
                 .map(policy -> policy.getPolicyHolders().getFirst());
     }
+
+    @Tool("Create or update a policy by policyNumber (upsert)")
+    @Override
+    public void put(Policy policy) {
+        if (policy == null || policy.getPolicyNumber() == null || policy.getPolicyNumber().isBlank()) {
+            throw new IllegalArgumentException("Policy and policyNumber are required");
+        }
+
+        // Se esiste, recupera l'entity per mantenere lo stesso _id; altrimenti crea nuova
+        PolicyEntity existing = find("policyNumber", policy.getPolicyNumber()).firstResult();
+
+        // Mappa dominio -> entity
+        PolicyEntity entity = policyMapper.toPolicyEntity(policy);
+
+        if (existing != null) {
+            delete(existing);
+        }
+
+        // Panache gestisce persist vs update in base alla presenza dell'id
+        persistOrUpdate(entity);
+    }
+
 }

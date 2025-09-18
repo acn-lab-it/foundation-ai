@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 public class Policy {
 
+    private String _id;
     private String policyStatus;
     private ProductReference productReference;
     private InsuredProperty insuredProperty;
