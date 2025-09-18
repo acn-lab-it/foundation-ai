@@ -1,25 +1,34 @@
 package com.accenture.claims.ai.adapter.inbound.rest.chatv2;
 
+import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
+import com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools.*;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
-import com.accenture.claims.ai.adapter.inbound.rest.GuardrailsContext;
 import com.accenture.claims.ai.application.tool.WelcomeTool;
-import com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools.*;
+import com.accenture.claims.ai.domain.model.*;
+import com.accenture.claims.ai.domain.model.emailParsing.Contacts;
+import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
+import com.accenture.claims.ai.domain.repository.PolicyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.Optional;
 
 @jakarta.ws.rs.Path("/api/fnol/chat")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
@@ -36,7 +45,8 @@ public class ChatV2Resource {
     FinalOutputJSONStore finalOutputJSONStore;
     @Inject
     WelcomeTool welcomeTool;
-
+    @Inject
+    ChatV2DamageDetailsV2 chatV2DamageDetailsV2;
     // ChatV2 specific tools
     @Inject
     ChatV2WelcomeToolV2 chatV2WelcomeTool;
@@ -60,6 +70,8 @@ public class ChatV2Resource {
     ChatV2CoverageVerifierV2 chatV2CoverageVerifier;
     @Inject
     ChatV2MediaHandlerV2 chatV2MediaHandler;
+    @Inject
+    PolicyRepository policyRepository;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -110,6 +122,770 @@ public class ChatV2Resource {
             this.label = label;
             this.completed = completed;
         }
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class UploadPolicyResponse {
+        private Reporter reporter;
+        private String policyNumber;
+        private String createdAt;
+        private String uploadedAt;
+    }
+
+    @Data
+    public static class UploadPolicyPolicyholder {
+        private UploadPolicyPersonalData personalData;
+        private boolean marketingAgreement;
+        private boolean isPolicyholderPayer;
+    }
+
+    @Data
+    public static class UploadPolicyPersonalData {
+        private String type;
+        private UploadPolicyNaturalPerson naturalPerson;
+        private UploadPolicyCompany company;
+        private UploadPolicyContact contact;
+        private UploadPolicyAddress address;
+    }
+
+    @Data
+    public static class UploadPolicyNaturalPerson {
+        private String firstName;
+        private String lastName;
+        private String idType;
+        private String idNumber;
+        private String birthdate;
+        private String gender;
+    }
+
+    @Data
+    public static class UploadPolicyCompany {
+        // Campi vuoti, puoi aggiungere se servono
+    }
+
+    @Data
+    public static class UploadPolicyContact {
+        private String phone;
+        private String email;
+    }
+
+    @Data
+    public static class UploadPolicyAddress {
+        private String streetName;
+        private String streetNumber;
+        private String zipCode;
+        private String city;
+        private String countryCode;
+    }
+
+    @Data
+    public static class UploadPolicyHouseholdRelatedAttributes {
+        private String role;
+        private UploadPolicyQuoteConfiguration quoteConfiguration;
+        private UploadPolicyProperty property;
+    }
+
+    @Data
+    public static class UploadPolicyQuoteConfiguration {
+        private UploadPolicySelection selection;
+    }
+
+    @Data
+    public static class UploadPolicySelection {
+        // Nessun campo definito
+    }
+
+    @Data
+    public static class UploadPolicyProperty {
+        private UploadPolicyPropertyAddress propertyAddress;
+        private boolean shortTermRental;
+    }
+
+    @Data
+    public static class UploadPolicyPropertyAddress {
+        private String streetName;
+        private String streetNumber;
+        private String zipCode;
+        private String city;
+    }
+
+    @Data
+    public static class UploadPolicyTransaction {
+        private String operationType;
+        private String status;
+        private String transactionId;
+        private String transactionNumber;
+        private String effectiveDate;
+        private String inceptionDate;
+        private String expiryDate;
+        private String cancellationDate;
+        private int versionNumber;
+        private String versionNumberBasedOn;
+        private String policyStatus;
+        private Object workflowContext;
+        private UploadPolicyDetails policyDetails;
+        private List<Object> quotes;
+    }
+
+    @Data
+    public static class UploadPolicyDetails {
+        private UploadPolicyCollection collection;
+        private UploadPolicyHouseholdRelatedAttributes householdRelatedAttributes;
+        private List<UploadPolicyPolicyholder> policyholders;
+        private String duration;
+        private String paymentFrequency;
+        private UploadPolicyUnderwriting underwriting;
+        private UploadPolicyConsentAgreements consentAgreements;
+    }
+
+    @Data
+    public static class UploadPolicyRenewal {
+        private String startProcessDate;
+        private String endProcessDate;
+        private String status;
+    }
+
+    @Data
+    public static class UploadPolicyCollection {
+        private String paymentMethod;
+        private UploadPolicySepaPayment sepaPayment;
+    }
+
+    @Data
+    public static class UploadPolicySepaPayment {
+        private String accountHolderFirstName;
+        private String accountHolderLastName;
+        private String iban;
+        private boolean termsAccepted;
+    }
+
+    @Data
+    public static class UploadPolicyUnderwriting {
+        private UploadPolicyQuestionnaire questionnaire;
+    }
+
+    @Data
+    public static class UploadPolicyQuestionnaire {
+        private boolean claimHistoryCheck;
+        private boolean propertyIssues;
+    }
+
+    @Data
+    public static class UploadPolicyConsentAgreements {
+        private Object legal;
+    }
+
+    @Data
+    public static class UploadPolicyRequest {
+        @NotBlank
+        String policyId;
+        @NotBlank
+        String policyNumber;
+        @NotBlank
+        String creationTimestamp;
+        @NotBlank
+        String updateTimestamp;
+        @NotBlank
+        String productLineId;
+        String effectiveDate;
+        String expiryDate;
+        String inceptionDate;
+        UploadPolicyRenewal renewal;
+        @NotNull
+        UploadPolicyTransaction transaction;
+
+    }
+
+
+    @POST
+    @jakarta.ws.rs.Path("/upload-document")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @jakarta.enterprise.context.control.ActivateRequestContext
+    public Response uploadPolicy(
+            UploadPolicyRequest request,
+            @HeaderParam("Accept-Language") String acceptLanguage) throws Exception {
+
+        String policyId = request.getPolicyId();
+        String creationTimestamp = request.getCreationTimestamp();
+        String updateTimestamp = request.getUpdateTimestamp();
+        String productLineId = request.getProductLineId();
+        UploadPolicyTransaction transaction = request.getTransaction();
+        
+        // Enhanced Reporter creation with SEPA payment data if available
+        Reporter reporter = new Reporter();
+        if (transaction.getPolicyDetails() != null && 
+            transaction.getPolicyDetails().getPolicyholders() != null && 
+            !transaction.getPolicyDetails().getPolicyholders().isEmpty()) {
+            
+            UploadPolicyPolicyholder firstHolder = transaction.getPolicyDetails().getPolicyholders().get(0);
+            if (firstHolder.getPersonalData() != null && firstHolder.getPersonalData().getNaturalPerson() != null) {
+                reporter.setFirstName(firstHolder.getPersonalData().getNaturalPerson().getFirstName());
+                reporter.setLastName(firstHolder.getPersonalData().getNaturalPerson().getLastName());
+            }
+            
+            Contacts contacts = new Contacts();
+            if (firstHolder.getPersonalData() != null && firstHolder.getPersonalData().getContact() != null) {
+                contacts.setMobile(firstHolder.getPersonalData().getContact().getPhone());
+                contacts.setEmail(firstHolder.getPersonalData().getContact().getEmail());
+            }
+            reporter.setContacts(contacts);
+        }
+        
+        UploadPolicyResponse response = new UploadPolicyResponse(reporter, policyId, creationTimestamp, updateTimestamp);
+        Policy policy = new Policy();
+        
+        // Generate _id
+        policy.set_id(generateId());
+        
+        // Status dalla transaction - prioritize transaction status, ensure it's ACTIVE
+        String finalPolicyStatus = transaction.getPolicyStatus() != null ? 
+            transaction.getPolicyStatus() : "ACTIVE";
+        
+        // Ensure policyStatus is properly set to ACTIVE
+        if (finalPolicyStatus == null || finalPolicyStatus.isBlank()) {
+            finalPolicyStatus = "ACTIVE";
+        }
+        
+        policy.setPolicyStatus(finalPolicyStatus);
+        policy.setPolicyNumber(request.getPolicyNumber());
+        
+        // Map dates - prioritize transaction dates, fallback to request dates
+        String effectiveDate = transaction.getEffectiveDate() != null ? transaction.getEffectiveDate() : request.effectiveDate;
+        
+        // endDate MUST come from transaction.expiryDate as specified
+        String expiryDate = transaction.getExpiryDate();
+        if (expiryDate == null || expiryDate.isBlank()) {
+            expiryDate = request.expiryDate;
+            System.out.println("WARNING: transaction.expiryDate is null/blank, using request.expiryDate: " + expiryDate);
+        }
+        
+        // Log raw dates for debugging
+        System.out.println("DEBUG: Raw effectiveDate: " + effectiveDate);
+        System.out.println("DEBUG: Raw expiryDate: " + expiryDate);
+        System.out.println("DEBUG: Transaction.expiryDate: " + transaction.getExpiryDate());
+        System.out.println("DEBUG: Request.expiryDate: " + request.expiryDate);
+        
+        // Parse and format dates correctly for MongoDB
+        java.util.Date beginDate = parseAndFormatDate(effectiveDate);
+        java.util.Date endDate = parseAndFormatDate(expiryDate);
+        
+        // If dates are null, generate default dates based on current time
+        if (beginDate == null) {
+            beginDate = new java.util.Date();
+            System.out.println("WARNING: No effective date found, using current date as beginDate");
+        }
+        if (endDate == null) {
+            // Set end date to 1 year from begin date
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            cal.setTime(beginDate);
+            cal.add(java.util.Calendar.YEAR, 1);
+            endDate = cal.getTime();
+            System.out.println("WARNING: No expiry date found, using 1 year from beginDate as endDate");
+        }
+        
+        policy.setBeginDate(beginDate);
+        policy.setEndDate(endDate);
+        
+        // Log parsed dates for debugging
+        System.out.println("DEBUG: Parsed beginDate: " + policy.getBeginDate());
+        System.out.println("DEBUG: Parsed endDate: " + policy.getEndDate());
+        
+        // Set _class
+        policy.set_class("com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.retail.home.RetailHomePolicyEntity");
+
+        // ProductReference: complete mapping
+        ProductReference pr = new ProductReference();
+        pr.setVersion("0.3.0");
+        pr.setName(productLineId.equals("MOTOR") ? "Allianz BMP Motor Product" : "Allianz BMP Home Product");
+        pr.setGroupNameApl("9e4f116b-05aa-4535-95e6-f02ca3446635"); // Mocked APL ID
+        pr.setGroupName(productLineId.equals("MOTOR") ? "MOTOR" : "MULTIRISK");
+        pr.setCode(productLineId.equals("MOTOR") ? "RMTP" : "RHTP"); // Mocked codes
+        policy.setProductReference(pr);
+
+        // InsuredProperty: complete mapping
+        UploadPolicyPropertyAddress pa =
+                Optional.ofNullable(transaction.getPolicyDetails())
+                        .map(UploadPolicyDetails::getHouseholdRelatedAttributes)
+                        .map(UploadPolicyHouseholdRelatedAttributes::getProperty)
+                        .map(UploadPolicyProperty::getPropertyAddress)
+                        .orElse(null);
+
+        if (pa != null) {
+            InsuredProperty insured = new InsuredProperty();
+            insured.set_id(generateId());
+            insured.setType("S47"); // Mocked type
+            
+            Address addr = new Address();
+            addr.setFullAddress(buildFullAddress(
+                    pa.getStreetName(),
+                    pa.getStreetNumber(),
+                    pa.getZipCode(),
+                    pa.getCity(),
+                    null
+            ));
+            
+            // Create streetDetails
+            StreetDetails streetDetails = createStreetDetails(pa.getStreetName(), pa.getStreetNumber());
+            addr.setStreetDetails(streetDetails);
+            
+            // Set address fields
+            addr.setCity(pa.getCity());
+            addr.setPostalCode(pa.getZipCode());
+            addr.setCountryCode(determineCountryCode(productLineId, null));
+            addr.setCountry(determineCountryCode(productLineId, null));
+            addr.setCountryCode(determineCountryCode(productLineId, null));
+            addr.setState(determineState(determineCountryCode(productLineId, null), pa.getCity()));
+            addr.set_class("com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity");
+            
+            insured.setAddress(addr);
+            policy.setInsuredProperty(insured);
+        }
+
+        // PolicyHolders: complete mapping
+        List<PolicyHolder> holders = new ArrayList<>();
+        if (transaction.getPolicyDetails() != null
+                && transaction.getPolicyDetails().getPolicyholders() != null) {
+            
+            // Get role from householdRelatedAttributes
+            String role = Optional.ofNullable(transaction.getPolicyDetails())
+                    .map(UploadPolicyDetails::getHouseholdRelatedAttributes)
+                    .map(UploadPolicyHouseholdRelatedAttributes::getRole)
+                    .orElse("TN"); // Default role
+            
+            for (UploadPolicyPolicyholder uph : transaction.getPolicyDetails().getPolicyholders()) {
+                PolicyHolder h = new PolicyHolder();
+                
+                // Generate _id and set _class
+                h.set_id(generateId());
+                h.set_class("com.allianz.bmp.claims.common.data.aggregator.core.policy.adapter.persistence.entity.common.policyholder.NaturalPersonPolicyHolderEntity");
+                
+                if (uph.getPersonalData() != null) {
+                    UploadPolicyPersonalData pd = uph.getPersonalData();
+                    if (pd.getNaturalPerson() != null) {
+                        UploadPolicyNaturalPerson np = pd.getNaturalPerson();
+                        h.setFirstName(np.getFirstName());
+                        h.setLastName(np.getLastName());
+                        h.setDateOfBirth(parseDateOrNull(np.getBirthdate()));
+                        h.setGender(np.getGender());
+                    }
+                    
+                    // Complete address mapping
+                    if (pd.getAddress() != null) {
+                        UploadPolicyAddress a = pd.getAddress();
+                        Address ha = new Address();
+                        ha.setFullAddress(buildFullAddress(
+                                a.getStreetName(),
+                                a.getStreetNumber(),
+                                a.getZipCode(),
+                                a.getCity(),
+                                a.getCountryCode()
+                        ));
+                        
+                        // Create streetDetails for PolicyHolder address
+                        StreetDetails streetDetails = createStreetDetails(a.getStreetName(), a.getStreetNumber());
+                        ha.setStreetDetails(streetDetails);
+                        
+                        // Set complete address fields
+                        ha.setCity(a.getCity());
+                        ha.setPostalCode(a.getZipCode());
+                        ha.setCountryCode(a.getCountryCode());
+                        ha.setCountry(a.getCountryCode());
+                        ha.setState(determineState(a.getCountryCode(), a.getCity()));
+                        ha.set_class("com.allianz.bmp.claims.common.data.aggregator.application.ausaal.policy.adapter.persistence.entity.AddressAusAalEntity");
+                        
+                        h.setAddress(ha);
+                    }
+
+                    // Complete contact channels mapping
+                    if (pd.getContact() != null) {
+                        UploadPolicyContact c = pd.getContact();
+                        List<ContactChannel> channels = new ArrayList<>();
+                        if (c.getEmail() != null && !c.getEmail().isBlank()) {
+                            ContactChannel email = new ContactChannel();
+                            email.setCommunicationType("EMAIL");
+                            email.setCommunicationDetails(c.getEmail());
+                            channels.add(email);
+                        }
+                        if (c.getPhone() != null && !c.getPhone().isBlank()) {
+                            ContactChannel phone = new ContactChannel();
+                            phone.setCommunicationType("MOBILE");
+                            phone.setCommunicationDetails(c.getPhone());
+                            channels.add(phone);
+                        }
+                        h.setContactChannels(channels);
+                    }
+                }
+                
+                // Set additional PolicyHolder fields
+                h.setPolicyHolderPayer(uph.isPolicyholderPayer());
+                h.setCustomerId(generateCustomerId(uph)); // Generate customer ID
+                
+                // Set roles array from household role
+                List<String> roles = new ArrayList<>();
+                roles.add(mapRoleToRoleType(role));
+                h.setRoles(roles);
+                
+                // Note: SEPA payment information (IBAN) is available in transaction.policyDetails.collection.sepaPayment
+                // but it should not be added to contact channels as it's not a communication method
+                
+                holders.add(h);
+            }
+        }
+        policy.setPolicyHolders(holders);
+
+        // Verify all required fields are present
+        verifyRequiredFields(policy);
+        
+        // Log complete mapping summary
+        logMappingSummary(request, policy);
+
+        // UPSERT: Update existing policy or create new one based on policyNumber
+        upsertPolicy(policy, request.getPolicyNumber());
+
+        return Response.ok(response).build();
+    }
+
+    private static String buildFullAddress(String streetName, String streetNumber, String zip, String city, String countryCode) {
+        StringBuilder sb = new StringBuilder();
+        if (streetName != null && !streetName.isBlank()) {
+            sb.append(streetName.trim());
+        }
+        if (streetNumber != null && !streetNumber.isBlank()) {
+            if (!sb.isEmpty()) sb.append(" ");
+            sb.append(streetNumber.trim());
+        }
+        if (zip != null && !zip.isBlank()) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(zip.trim());
+        }
+        if (city != null && !city.isBlank()) {
+            if (!sb.isEmpty()) sb.append(" ");
+            sb.append(city.trim());
+        }
+        if (countryCode != null && !countryCode.isBlank()) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(countryCode.trim());
+        }
+        return sb.toString();
+    }
+
+
+    // Helpers locali per parsing date
+    private static java.util.Date parseDateOrNull(String yyyyMMdd) {
+        if (yyyyMMdd == null || yyyyMMdd.isBlank()) return null;
+        try {
+            java.time.LocalDate d = java.time.LocalDate.parse(yyyyMMdd);
+            return java.util.Date.from(d.atStartOfDay(java.time.ZoneId.of("UTC")).toInstant());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private static java.util.Date parseDateTimeOrNull(String iso) {
+        if (iso == null || iso.isBlank()) return null;
+        try {
+            return java.util.Date.from(java.time.Instant.parse(iso));
+        } catch (Exception e) {
+            // fallback OffsetDateTime (es: ±hh:mm)
+            try {
+                return java.util.Date.from(java.time.OffsetDateTime.parse(iso).toInstant());
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+    }
+
+    private static java.util.Date parseAndFormatDate(String dateString) {
+        if (dateString == null || dateString.isBlank()) return null;
+        
+        try {
+            // Try different date formats
+            if (dateString.contains("T")) {
+                // ISO format with time
+                if (dateString.endsWith("Z")) {
+                    // Format: 2024-11-15T00:00:00.000Z
+                    return java.util.Date.from(java.time.Instant.parse(dateString));
+                } else if (dateString.contains("+") || dateString.contains("-")) {
+                    // Format: 2024-11-15T00:00:00.000+00:00
+                    return java.util.Date.from(java.time.OffsetDateTime.parse(dateString).toInstant());
+                } else {
+                    // Format: 2024-11-15T00:00:00.000
+                    return java.util.Date.from(java.time.LocalDateTime.parse(dateString).atZone(java.time.ZoneId.of("UTC")).toInstant());
+                }
+            } else {
+                // Date only format: 2024-11-15
+                java.time.LocalDate localDate = java.time.LocalDate.parse(dateString);
+                return java.util.Date.from(localDate.atStartOfDay(java.time.ZoneId.of("UTC")).toInstant());
+            }
+        } catch (Exception e) {
+            System.err.println("Error parsing date: " + dateString + " - " + e.getMessage());
+            return null;
+        }
+    }
+
+    // Helper methods for complete mapping
+    private static String generateId() {
+        return UUID.randomUUID().toString();
+    }
+
+    private static StreetDetails createStreetDetails(String streetName, String streetNumber) {
+        if (streetName == null && streetNumber == null) return null;
+        
+        StreetDetails streetDetails = new StreetDetails();
+        if (streetName != null && !streetName.isBlank()) {
+            // Estrai nome e tipo dalla street name
+            String[] parts = streetName.trim().split("\\s+");
+            if (parts.length > 1) {
+                streetDetails.setName(parts[0]);
+                streetDetails.setNameType(String.join(" ", Arrays.copyOfRange(parts, 1, parts.length)));
+            } else {
+                streetDetails.setName(streetName.trim());
+                streetDetails.setNameType(" ");
+            }
+        }
+        if (streetNumber != null && !streetNumber.isBlank()) {
+            streetDetails.setNumber(streetNumber.trim());
+            streetDetails.setNumberType("STNO");
+        }
+        return streetDetails;
+    }
+
+    private static String determineCountryCode(String productLineId, String addressCountryCode) {
+        // Se abbiamo countryCode dall'indirizzo, usalo
+        if (addressCountryCode != null && !addressCountryCode.isBlank()) {
+            return addressCountryCode;
+        }
+        
+        // Altrimenti determina dal productLineId o usa default
+        switch (productLineId != null ? productLineId.toUpperCase() : "") {
+            case "MOTOR":
+                return "AUT"; // Default per motor
+            case "HOME":
+                return "ESP"; // Default per home (dato che nel JSON vediamo Barcelona)
+            default:
+                return "AUT"; // Default fallback
+        }
+    }
+
+    private static String determineState(String countryCode, String city) {
+        // Mapping semplificato per stati/province
+        if ("ESP".equals(countryCode)) {
+            if (city != null && city.toLowerCase().contains("barcelona")) {
+                return "BCN";
+            }
+            return "MAD"; // Default per Spagna
+        } else if ("AUT".equals(countryCode)) {
+            return "VI"; // Vienna default
+        } else if ("DE".equals(countryCode)) {
+            return "BE"; // Berlin default
+        }
+        return "UNKNOWN";
+    }
+
+    private static String generateCustomerId(UploadPolicyPolicyholder uph) {
+        // Generate a mock customer ID based on personal data
+        if (uph.getPersonalData() != null && uph.getPersonalData().getNaturalPerson() != null) {
+            String firstName = uph.getPersonalData().getNaturalPerson().getFirstName();
+            String lastName = uph.getPersonalData().getNaturalPerson().getLastName();
+            String idNumber = uph.getPersonalData().getNaturalPerson().getIdNumber();
+            
+            // Create a hash-based customer ID similar to the example
+            String baseData = (firstName != null ? firstName : "") + 
+                            (lastName != null ? lastName : "") + 
+                            (idNumber != null ? idNumber : "");
+            
+            return "V20F" + Integer.toHexString(baseData.hashCode()).toUpperCase() + "C4526018FDEF311E2365E5BFD11D6DEC965B554DE52CB4DA905C65A046258DC566B7B77B4385F000BF6AF4";
+        }
+        return "V20F" + UUID.randomUUID().toString().replace("-", "").toUpperCase() + "C4526018FDEF311E2365E5BFD11D6DEC965B554DE52CB4DA905C65A046258DC566B7B77B4385F000BF6AF4";
+    }
+
+    private static String mapRoleToRoleType(String role) {
+        // Map household role to role type
+        switch (role != null ? role.toUpperCase() : "") {
+            case "TN":
+                return "TENANT";
+            case "LL":
+                return "LANDLORD";
+            case "OW":
+                return "OWNER";
+            case "RE":
+                return "RENTER";
+            default:
+                return "TENANT"; // Default fallback
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private static void logMappingSummary(UploadPolicyRequest request, Policy policy) {
+        System.out.println("\n=== COMPLETE POLICY MAPPING SUMMARY ===");
+        System.out.println("✅ INPUT DATA PROCESSED:");
+        System.out.println("  - Policy ID: " + request.getPolicyId());
+        System.out.println("  - Policy Number: " + request.getPolicyNumber());
+        System.out.println("  - Product Line: " + request.getProductLineId());
+        System.out.println("  - Creation Timestamp: " + request.getCreationTimestamp());
+        System.out.println("  - Update Timestamp: " + request.getUpdateTimestamp());
+        
+        if (request.getRenewal() != null) {
+            System.out.println("  - Renewal Status: " + request.getRenewal().getStatus());
+            System.out.println("  - Renewal Period: " + request.getRenewal().getStartProcessDate() + " to " + request.getRenewal().getEndProcessDate());
+        }
+        
+        UploadPolicyTransaction transaction = request.getTransaction();
+        if (transaction != null) {
+            System.out.println("  - Transaction ID: " + transaction.getTransactionId());
+            System.out.println("  - Operation Type: " + transaction.getOperationType());
+            System.out.println("  - Transaction Status: " + transaction.getStatus());
+            System.out.println("  - Version Number: " + transaction.getVersionNumber());
+            
+            if (transaction.getPolicyDetails() != null) {
+                System.out.println("  - Duration: " + transaction.getPolicyDetails().getDuration());
+                System.out.println("  - Payment Frequency: " + transaction.getPolicyDetails().getPaymentFrequency());
+                
+                if (transaction.getPolicyDetails().getCollection() != null) {
+                    System.out.println("  - Payment Method: " + transaction.getPolicyDetails().getCollection().getPaymentMethod());
+                }
+            }
+        }
+        
+        System.out.println("\n✅ OUTPUT POLICY CREATED:");
+        System.out.println("  - Generated Policy ID: " + policy.get_id());
+        System.out.println("  - Policy Status: " + policy.getPolicyStatus() + " (should be ACTIVE)");
+        System.out.println("  - Begin Date: " + policy.getBeginDate() + " (should be formatted as Date object)");
+        System.out.println("  - End Date: " + policy.getEndDate() + " (should be formatted as Date object)");
+        System.out.println("  - Policy Holders: " + (policy.getPolicyHolders() != null ? policy.getPolicyHolders().size() : 0));
+        System.out.println("  - Has Insured Property: " + (policy.getInsuredProperty() != null ? "YES" : "NO"));
+        System.out.println("  - Product Reference: " + (policy.getProductReference() != null ? policy.getProductReference().getName() : "NONE"));
+        
+        if (policy.getPolicyHolders() != null && !policy.getPolicyHolders().isEmpty()) {
+            System.out.println("\n✅ POLICY HOLDERS DETAILS:");
+            for (int i = 0; i < policy.getPolicyHolders().size(); i++) {
+                PolicyHolder holder = policy.getPolicyHolders().get(i);
+                System.out.println("  Holder " + (i + 1) + ":");
+                System.out.println("    - Name: " + holder.getFirstName() + " " + holder.getLastName());
+                System.out.println("    - Customer ID: " + holder.getCustomerId());
+                System.out.println("    - Roles: " + (holder.getRoles() != null ? holder.getRoles() : "NONE"));
+                System.out.println("    - Contact Channels: " + (holder.getContactChannels() != null ? holder.getContactChannels().size() : 0));
+                System.out.println("    - Is Payer: " + holder.isPolicyHolderPayer());
+            }
+        }
+        
+        System.out.println("\n=== MAPPING COMPLETED SUCCESSFULLY ===\n");
+    }
+
+    private static void verifyRequiredFields(Policy policy) {
+        System.out.println("\n🔍 VERIFYING REQUIRED FIELDS:");
+        
+        // Check _id
+        if (policy.get_id() != null && !policy.get_id().isBlank()) {
+            System.out.println("✅ _id: " + policy.get_id());
+        } else {
+            System.out.println("❌ _id: MISSING");
+        }
+        
+        // Check policyStatus
+        if (policy.getPolicyStatus() != null && !policy.getPolicyStatus().isBlank()) {
+            System.out.println("✅ policyStatus: " + policy.getPolicyStatus());
+        } else {
+            System.out.println("❌ policyStatus: MISSING");
+        }
+        
+        // Check beginDate
+        if (policy.getBeginDate() != null) {
+            System.out.println("✅ beginDate: " + policy.getBeginDate() + " (type: " + policy.getBeginDate().getClass().getSimpleName() + ")");
+        } else {
+            System.out.println("❌ beginDate: MISSING");
+        }
+        
+        // Check endDate
+        if (policy.getEndDate() != null) {
+            System.out.println("✅ endDate: " + policy.getEndDate() + " (type: " + policy.getEndDate().getClass().getSimpleName() + ")");
+        } else {
+            System.out.println("❌ endDate: MISSING");
+        }
+        
+        // Check policyNumber
+        if (policy.getPolicyNumber() != null && !policy.getPolicyNumber().isBlank()) {
+            System.out.println("✅ policyNumber: " + policy.getPolicyNumber());
+        } else {
+            System.out.println("❌ policyNumber: MISSING");
+        }
+        
+        // Check productReference
+        if (policy.getProductReference() != null) {
+            System.out.println("✅ productReference: " + policy.getProductReference().getName());
+        } else {
+            System.out.println("❌ productReference: MISSING");
+        }
+        
+        // Check policyHolders
+        if (policy.getPolicyHolders() != null && !policy.getPolicyHolders().isEmpty()) {
+            System.out.println("✅ policyHolders: " + policy.getPolicyHolders().size() + " holders");
+        } else {
+            System.out.println("❌ policyHolders: MISSING OR EMPTY");
+        }
+        
+        // Check insuredProperty
+        if (policy.getInsuredProperty() != null) {
+            System.out.println("✅ insuredProperty: Present");
+        } else {
+            System.out.println("❌ insuredProperty: MISSING");
+        }
+        
+        // Check _class
+        if (policy.get_class() != null && !policy.get_class().isBlank()) {
+            System.out.println("✅ _class: " + policy.get_class());
+        } else {
+            System.out.println("❌ _class: MISSING");
+        }
+        
+        System.out.println("=====================================\n");
+    }
+
+    @SuppressWarnings("unused")
+    private void upsertPolicy(Policy policy, String policyNumber) {
+        System.out.println("\n🔄 UPSERT POLICY OPERATION:");
+        System.out.println("Policy Number: " + policyNumber);
+        
+        try {
+            // Check if policy already exists
+            Optional<Policy> existingPolicy = policyRepository.findByPolicyNumber(policyNumber);
+            
+            if (existingPolicy.isPresent()) {
+                System.out.println("✅ EXISTING POLICY FOUND - UPDATING:");
+                Policy existing = existingPolicy.get();
+                System.out.println("  - Existing Policy ID: " + existing.get_id());
+                System.out.println("  - Existing Policy Status: " + existing.getPolicyStatus());
+                System.out.println("  - Existing Begin Date: " + existing.getBeginDate());
+                System.out.println("  - Existing End Date: " + existing.getEndDate());
+                
+                // Preserve the existing _id to maintain database consistency
+                policy.set_id(existing.get_id());
+                System.out.println("  - Preserved existing _id: " + policy.get_id());
+                
+                // Update the policy
+                policyRepository.put(policy);
+                System.out.println("✅ POLICY UPDATED SUCCESSFULLY");
+                
+            } else {
+                System.out.println("🆕 NEW POLICY - CREATING:");
+                System.out.println("  - New Policy ID: " + policy.get_id());
+                System.out.println("  - Policy Number: " + policy.getPolicyNumber());
+                System.out.println("  - Policy Status: " + policy.getPolicyStatus());
+                
+                // Create new policy
+                policyRepository.put(policy);
+                System.out.println("✅ NEW POLICY CREATED SUCCESSFULLY");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ ERROR DURING UPSERT: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to upsert policy: " + e.getMessage(), e);
+        }
+        
+        System.out.println("=====================================\n");
     }
 
     @POST
@@ -314,7 +1090,9 @@ public class ChatV2Resource {
             
             // Salva SEMPRE i dati estratti (anche parziali)
             saveStep2Data(sessionId, extractedData);
-            
+
+            chatV2DamageDetailsV2.runOcr(sessionId, userMessage);
+
             // Processa eventuali media con ChatV2MediaOcrAgentV2 PRIMA della validazione
             System.out.println("DEBUG: Checking for media files in extractedData: " + extractedData.containsKey("mediaFiles"));
             if (extractedData.containsKey("mediaFiles")) {

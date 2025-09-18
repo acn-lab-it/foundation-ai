@@ -7,8 +7,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.Tool;
-import dev.langchain4j.data.message.*;
-import dev.langchain4j.model.chat.*;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -90,8 +91,10 @@ public class ChatV2WhatHappenedToolV2 {
         SystemMessage sys = SystemMessage.from("""
         Sei un classificatore assicurativo esperto.
         Ogni stringa è strutturata come: "CODICE" = "DESCRIZIONE" [CLASSE_GRUPPO].
-        Scegli ESATTAMENTE uno dei codici nella lista seguente per whatHappenedCode.
-        Scegli ESATTAMENTE una delle descrizioni nella lista seguente per whatHappenedContext.
+                    Scegli ESATTAMENTE una delle righe in base a quella che ritieni più appropriata.
+                    Riporta il codice corrispondente nel campo whatHappenedCode.
+                    Riporta la descrizione corrispondente nel campo whatHappenedContext.
+                    Riporta la classe gruppo corrispondente nel campo claimClassGroup.
         Se nessun codice è adatto, usa UNKNOWN.
         Rispondi **esclusivamente** con un JSON:
         { "whatHappenedCode": <CODICE>,

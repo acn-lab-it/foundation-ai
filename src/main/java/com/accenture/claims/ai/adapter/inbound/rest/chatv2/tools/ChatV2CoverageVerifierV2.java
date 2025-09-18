@@ -1,9 +1,12 @@
 package com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools;
 
+import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
+import com.accenture.claims.ai.domain.model.Policy;
 import com.accenture.claims.ai.domain.repository.PolicyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -16,7 +19,11 @@ import jakarta.inject.Inject;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @ApplicationScoped
 public class ChatV2CoverageVerifierV2 {
@@ -33,23 +40,30 @@ public class ChatV2CoverageVerifierV2 {
     @Inject
     LanguageHelper languageHelper;
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    @Inject
+    FinalOutputJSONStore finalOutputJSONStore;
+
+    private final ObjectMapper mapper = new ObjectMapper(); // Used for JSON operations in buildContextInfo
+
 
     @Tool("Verify policy coverage for specific damage type and date")
     public Map<String, Object> verifyPolicyCoverageV2(String sessionId, String policyNumber, String incidentDate, String damageType) {
         Map<String, Object> result = new HashMap<>();
         
         try {
-            // Verifica esistenza polizza
-            if (!policyRepository.findByPolicyNumber(policyNumber).isPresent()) {
+            // Recupera polizza dal DB
+            Optional<Policy> policyOpt = policyRepository.findByPolicyNumber(policyNumber);
+            if (!policyOpt.isPresent()) {
                 result.put("covered", false);
                 result.put("reason", "Polizza non trovata");
                 result.put("limitations", List.of("Polizza inesistente"));
                 return result;
             }
-
+            
+            Policy policy = policyOpt.get();
+            
             // Verifica data incidente
-            boolean dateCovered = verifyDateCoverage(policyNumber, incidentDate);
+            boolean dateCovered = verifyDateCoverage(policy, incidentDate);
             if (!dateCovered) {
                 result.put("covered", false);
                 result.put("reason", "Data incidente non coperta dalla polizza");
@@ -57,18 +71,29 @@ public class ChatV2CoverageVerifierV2 {
                 return result;
             }
 
-            // Verifica tipo di danno
-            boolean damageTypeCovered = verifyDamageTypeCoverage(policyNumber, damageType, sessionId);
-            if (!damageTypeCovered) {
-                result.put("covered", false);
-                result.put("reason", "Tipo di danno non coperto dalla polizza");
-                result.put("limitations", List.of("Danno non coperto dalla polizza"));
-                return result;
+            // Classifica il danno con AI usando informazioni di contesto
+            String damageCategory = classifyDamageWithAI(sessionId, damageType);
+            result.put("damageCategory", damageCategory);
+            
+            // Estrai groupName dalla polizza
+            String policyGroupName = policy.getProductReference() != null ? 
+                policy.getProductReference().getGroupName() : "UNKNOWN";
+            result.put("policyGroupName", policyGroupName);
+            
+            // Applica logica di copertura MOTOR vs MULTIRISK
+            boolean isCovered = applyCoverageLogic(damageCategory, policyGroupName);
+            result.put("covered", isCovered);
+            
+            if (!isCovered) {
+                // Genera warning multilingua
+                String lang = sessionLanguageContext != null ? sessionLanguageContext.getLanguage(sessionId) : "it";
+                String warningReason = generateWarningReason(lang, damageCategory, policyGroupName);
+                result.put("reason", warningReason);
+                result.put("limitations", List.of("Tipo di danno non coperto dalla polizza"));
+            } else {
+                result.put("reason", "Danno coperto dalla polizza");
+                result.put("limitations", List.of());
             }
-
-            // Verifica copertura completa
-            Map<String, Object> fullCoverage = verifyFullCoverage(policyNumber, incidentDate, damageType, sessionId);
-            result.putAll(fullCoverage);
 
         } catch (Exception e) {
             result.put("covered", false);
@@ -79,57 +104,14 @@ public class ChatV2CoverageVerifierV2 {
         return result;
     }
 
-    @Tool("Check if damage type is covered by policy")
-    public boolean isDamageTypeCoveredV2(String policyNumber, String whatHappenedCode, String damageDetails) {
+    private boolean verifyDateCoverage(Policy policy, String incidentDate) {
         try {
-            // Verifica base: se abbiamo un codice valido
-            if (whatHappenedCode == null || whatHappenedCode.equals("UNKNOWN")) {
+            Date incidentDateObj = parseIncidentDate(incidentDate);
+            if (incidentDateObj == null) {
                 return false;
             }
-
-            // Verifica con AI se il tipo di danno è coperto
-            return verifyDamageTypeWithAI(policyNumber, whatHappenedCode, damageDetails);
-
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    @Tool("Get policy coverage details")
-    public Map<String, Object> getPolicyCoverageDetailsV2(String policyNumber) {
-        Map<String, Object> result = new HashMap<>();
-        
-        try {
-            return policyRepository.findByPolicyNumber(policyNumber)
-                    .map(policy -> {
-                        result.put("policyNumber", policy.getPolicyNumber());
-                        result.put("beginDate", policy.getBeginDate().toString());
-                        result.put("endDate", policy.getEndDate().toString());
-                        result.put("status", policy.getPolicyStatus());
-                        result.put("coverageType", policy.getProductReference() != null ? 
-                                policy.getProductReference().getCode() : "UNKNOWN");
-                        return result;
-                    })
-                    .orElse(Map.of("error", "Polizza non trovata"));
-
-        } catch (Exception e) {
-            result.put("error", "Errore nel recupero dettagli polizza: " + e.getMessage());
-            return result;
-        }
-    }
-
-    private boolean verifyDateCoverage(String policyNumber, String incidentDate) {
-        try {
-            return policyRepository.findByPolicyNumber(policyNumber)
-                    .map(policy -> {
-                        Date incidentDateObj = parseIncidentDate(incidentDate);
-                        if (incidentDateObj == null) {
-                            return false;
-                        }
-                        return policy.getBeginDate().before(incidentDateObj) && 
-                               policy.getEndDate().after(incidentDateObj);
-                    })
-                    .orElse(false);
+            return policy.getBeginDate().before(incidentDateObj) && 
+                   policy.getEndDate().after(incidentDateObj);
 
         } catch (Exception e) {
             return false;
@@ -148,139 +130,221 @@ public class ChatV2CoverageVerifierV2 {
         }
     }
 
-    private boolean verifyDamageTypeCoverage(String policyNumber, String damageType, String sessionId) {
-        try {
-            // Verifica base: se non abbiamo tipo di danno, assumiamo coperto
-            if (damageType == null || damageType.trim().isEmpty()) {
-                return true;
-            }
-
-            // Verifica con AI
-            return verifyDamageTypeWithAI(policyNumber, damageType, "");
-
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean verifyDamageTypeWithAI(String policyNumber, String damageType, String damageDetails) {
-        try {
-            String lang = sessionLanguageContext != null ? sessionLanguageContext.getLanguage(policyNumber) : "en";
-
-            String sys = """
-                You are an expert insurance coverage analyzer.
-                Determine if the given damage type is covered by the policy.
-                
-                Policy Number: {{policyNumber}}
-                Damage Type: {{damageType}}
-                Damage Details: {{damageDetails}}
-                
-                Return ONLY a JSON with this structure:
-                {
-                  "covered": true/false,
-                  "reason": "explanation",
-                  "coverageType": "PROPERTY|MOTOR|LIABILITY|UNKNOWN",
-                  "confidence": 0.0-1.0
-                }
-                """;
-
-            try {
-                if (languageHelper != null) {
-                    LanguageHelper.PromptResult p = languageHelper.getPromptWithLanguage(lang, "fnol.coverage.verificationPrompt");
-                    if (p != null && p.prompt != null && !p.prompt.isBlank()) {
-                        sys = languageHelper.applyVariables(p.prompt, Map.of(
-                                "policyNumber", policyNumber,
-                                "damageType", damageType,
-                                "damageDetails", damageDetails
-                        ));
-                    }
-                }
-            } catch (Exception ignore) {
-                // usa fallback
-            }
-
-            ChatRequest chatRequest = ChatRequest.builder()
-                    .messages(List.of(
-                            SystemMessage.from(sys),
-                            UserMessage.from("Verifica se il danno è coperto dalla polizza.")
-                    ))
-                    .build();
-
-            ChatResponse chatResponse = chatModel.chat(chatRequest);
-            String raw = chatResponse.aiMessage().text();
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> result = mapper.readValue(raw, Map.class);
-            return (Boolean) result.getOrDefault("covered", false);
-
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private Map<String, Object> verifyFullCoverage(String policyNumber, String incidentDate, String damageType, String sessionId) {
-        Map<String, Object> result = new HashMap<>();
-        
+    private String classifyDamageWithAI(String sessionId, String damageType) {
         try {
             String lang = sessionLanguageContext != null ? sessionLanguageContext.getLanguage(sessionId) : "en";
 
+            // Recupera tutti i dati disponibili dalla sessione
+            ObjectNode sessionData = finalOutputJSONStore.get("final_output", sessionId);
+            String contextInfo = buildContextInfo(sessionData, damageType);
+            
+            // Debug logging
+            System.out.println("DEBUG: Damage classification context for session " + sessionId + ":");
+            System.out.println(contextInfo);
+
             String sys = """
-                You are an expert insurance coverage analyzer.
-                Perform a comprehensive coverage verification for the given policy and incident.
+                You are an expert insurance damage classifier.
+                Classify the given damage information into ONE and ONLY ONE of these categories:
+                - MOTOR (vehicle-related damage, car accidents, motorcycle incidents)
+                - PROPERTY (building, home, property damage, fire, water, theft)
+                - LIABILITY (personal injury, third-party damage, legal liability)
+                - OTHER (any other type of damage not fitting the above categories)
                 
-                Policy Number: {{policyNumber}}
-                Incident Date: {{incidentDate}}
-                Damage Type: {{damageType}}
+                Available Information:
+                {{contextInfo}}
                 
-                Return ONLY a JSON with this structure:
-                {
-                  "covered": true/false,
-                  "reason": "detailed explanation",
-                  "coverageType": "PROPERTY|MOTOR|LIABILITY|UNKNOWN",
-                  "limitations": ["limitation1", "limitation2"],
-                  "exclusions": ["exclusion1", "exclusion2"],
-                  "confidence": 0.0-1.0,
-                  "recommendations": ["recommendation1", "recommendation2"]
-                }
+                Return ONLY the category name (MOTOR, PROPERTY, LIABILITY, or OTHER).
+                Be precise and choose the most appropriate category based on ALL available information.
                 """;
 
             try {
                 if (languageHelper != null) {
-                    LanguageHelper.PromptResult p = languageHelper.getPromptWithLanguage(lang, "fnol.coverage.fullVerificationPrompt");
+                    LanguageHelper.PromptResult p = languageHelper.getPromptWithLanguage(lang, "fnol.coverage.damageClassificationPrompt");
                     if (p != null && p.prompt != null && !p.prompt.isBlank()) {
-                        sys = languageHelper.applyVariables(p.prompt, Map.of(
-                                "policyNumber", policyNumber,
-                                "incidentDate", incidentDate,
-                                "damageType", damageType
-                        ));
+                        sys = p.prompt;
                     }
                 }
             } catch (Exception ignore) {
                 // usa fallback
             }
 
+            sys = languageHelper.applyVariables(sys, Map.of("contextInfo", contextInfo));
+            
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(List.of(
                             SystemMessage.from(sys),
-                            UserMessage.from("Esegui verifica completa della copertura.")
+                            UserMessage.from("Classifica il tipo di danno in una sola categoria basandoti su tutte le informazioni disponibili.")
                     ))
+                    .temperature(0.1) // Low temperature for consistent classification
                     .build();
 
             ChatResponse chatResponse = chatModel.chat(chatRequest);
-            String raw = chatResponse.aiMessage().text();
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> verification = mapper.readValue(raw, Map.class);
-            result.putAll(verification);
+            String category = chatResponse.aiMessage().text().trim().toUpperCase();
+            
+            // Validate and normalize the category
+            if (category.equals("MOTOR") || category.equals("PROPERTY") || 
+                category.equals("LIABILITY") || category.equals("OTHER")) {
+                return category;
+            } else {
+                // Fallback to OTHER if classification is unclear
+                return "OTHER";
+            }
 
         } catch (Exception e) {
-            result.put("covered", false);
-            result.put("reason", "Errore nella verifica completa: " + e.getMessage());
-            result.put("confidence", 0.0);
+            System.err.println("Error in damage classification: " + e.getMessage());
+            return "OTHER"; // Safe fallback
         }
-
-        return result;
     }
+
+    private String buildContextInfo(ObjectNode sessionData, String damageType) {
+        StringBuilder context = new StringBuilder();
+        
+        try {
+            // Informazioni base
+            context.append("User Description: ").append(damageType != null ? damageType : "N/A").append("\n");
+            
+            if (sessionData != null) {
+                // Informazioni dall'incidente
+                if (sessionData.has("whatHappenedContext") && !sessionData.get("whatHappenedContext").isNull()) {
+                    context.append("Incident Context: ").append(sessionData.get("whatHappenedContext").asText()).append("\n");
+                }
+                
+                if (sessionData.has("whatHappenedCode") && !sessionData.get("whatHappenedCode").isNull()) {
+                    context.append("Incident Code: ").append(sessionData.get("whatHappenedCode").asText()).append("\n");
+                }
+                
+                // Dettagli del danno
+                if (sessionData.has("damageDetails") && !sessionData.get("damageDetails").isNull()) {
+                    context.append("Damage Details: ").append(sessionData.get("damageDetails").asText()).append("\n");
+                }
+                
+                // Circostanze
+                if (sessionData.has("circumstances") && !sessionData.get("circumstances").isNull()) {
+                    ObjectNode circumstances = (ObjectNode) sessionData.get("circumstances");
+                    if (circumstances.has("details") && !circumstances.get("details").isNull()) {
+                        context.append("Circumstances Details: ").append(circumstances.get("details").asText()).append("\n");
+                    }
+                    if (circumstances.has("notes") && !circumstances.get("notes").isNull()) {
+                        context.append("Circumstances Notes: ").append(circumstances.get("notes").asText()).append("\n");
+                    }
+                }
+                
+                // Analisi media e OCR
+                if (sessionData.has("imagesUploaded") && !sessionData.get("imagesUploaded").isNull()) {
+                    context.append("Media Analysis:\n");
+                    sessionData.get("imagesUploaded").forEach(media -> {
+                        if (media.has("mediaDescription") && !media.get("mediaDescription").isNull()) {
+                            context.append("  - ").append(media.get("mediaDescription").asText()).append("\n");
+                        }
+                    });
+                }
+                
+                // Informazioni aggiuntive da _internals se disponibili
+                if (sessionData.has("_internals") && !sessionData.get("_internals").isNull()) {
+                    ObjectNode internals = (ObjectNode) sessionData.get("_internals");
+                    
+                    // OCR results se disponibili
+                    if (internals.has("ocrResults") && !internals.get("ocrResults").isNull()) {
+                        context.append("OCR Analysis:\n");
+                        internals.get("ocrResults").forEach(ocr -> {
+                            if (ocr.has("damagedEntity") && !ocr.get("damagedEntity").isNull()) {
+                                context.append("  - Damaged Entity: ").append(ocr.get("damagedEntity").asText());
+                            }
+                            if (ocr.has("eventType") && !ocr.get("eventType").isNull()) {
+                                context.append(" (Event: ").append(ocr.get("eventType").asText()).append(")");
+                            }
+                            if (ocr.has("confidence") && !ocr.get("confidence").isNull()) {
+                                context.append(" [Confidence: ").append(ocr.get("confidence").asDouble()).append("]");
+                            }
+                            context.append("\n");
+                        });
+                    }
+                    
+                    // Media analysis se disponibile
+                    if (internals.has("mediaAnalysis") && !internals.get("mediaAnalysis").isNull()) {
+                        context.append("Media Analysis Summary: ").append(internals.get("mediaAnalysis").asText()).append("\n");
+                    }
+                }
+            }
+            
+            // Se non abbiamo informazioni sufficienti
+            if (context.length() <= 20) {
+                context.append("Limited information available for classification.");
+            }
+            
+        } catch (Exception e) {
+            System.err.println("Error building context info: " + e.getMessage());
+            context.append("Error retrieving context information.");
+        }
+        
+        return context.toString();
+    }
+
+    private boolean applyCoverageLogic(String damageCategory, String policyGroupName) {
+        // Logica di copertura:
+        // - MOTOR policy: copre solo danni MOTOR
+        // - MULTIRISK policy: copre tutto tranne MOTOR
+        
+        if (damageCategory == null || policyGroupName == null) {
+            return false;
+        }
+        
+        if (damageCategory.equals("MOTOR") && policyGroupName.equals("MOTOR")) {
+            return true;
+        } else if (!damageCategory.equals("MOTOR") && policyGroupName.equals("MULTIRISK")) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    private String generateWarningReason(String lang, String damageCategory, String policyGroupName) {
+        String normalizedLang = normalizeLanguage(lang);
+        
+        if ("it".equals(normalizedLang)) {
+            if (damageCategory.equals("MOTOR") && policyGroupName.equals("MULTIRISK")) {
+                return "Il danno MOTOR non è coperto da una polizza MULTIRISK. È necessaria una polizza MOTOR.";
+            } else if (!damageCategory.equals("MOTOR") && policyGroupName.equals("MOTOR")) {
+                return "Il danno " + damageCategory + " non è coperto da una polizza MOTOR. È necessaria una polizza MULTIRISK.";
+            } else {
+                return "Tipo di danno non coperto dalla polizza " + policyGroupName;
+            }
+        } else if ("de".equals(normalizedLang)) {
+            if (damageCategory.equals("MOTOR") && policyGroupName.equals("MULTIRISK")) {
+                return "MOTOR-Schäden sind nicht durch eine MULTIRISK-Police abgedeckt. Eine MOTOR-Police ist erforderlich.";
+            } else if (!damageCategory.equals("MOTOR") && policyGroupName.equals("MOTOR")) {
+                return "Schäden vom Typ " + damageCategory + " sind nicht durch eine MOTOR-Police abgedeckt. Eine MULTIRISK-Police ist erforderlich.";
+            } else {
+                return "Schadenstyp nicht durch " + policyGroupName + "-Police abgedeckt";
+            }
+        } else {
+            // English default
+            if (damageCategory.equals("MOTOR") && policyGroupName.equals("MULTIRISK")) {
+                return "MOTOR damage is not covered by a MULTIRISK policy. A MOTOR policy is required.";
+            } else if (!damageCategory.equals("MOTOR") && policyGroupName.equals("MOTOR")) {
+                return damageCategory + " damage is not covered by a MOTOR policy. A MULTIRISK policy is required.";
+            } else {
+                return "Damage type not covered by " + policyGroupName + " policy";
+            }
+        }
+    }
+
+    private String normalizeLanguage(String lang) {
+        if (lang == null || lang.isBlank()) {
+            return "en"; // Default English
+        }
+        
+        String lowerLang = lang.toLowerCase().trim();
+        
+        if (lowerLang.startsWith("it") || lowerLang.contains("italian")) {
+            return "it";
+        } else if (lowerLang.startsWith("de") || lowerLang.contains("german")) {
+            return "de";
+        } else {
+            return "en"; // Default to English
+        }
+    }
+
 
     @Tool("Check policy active status")
     public boolean isPolicyActiveV2(String policyNumber) {
