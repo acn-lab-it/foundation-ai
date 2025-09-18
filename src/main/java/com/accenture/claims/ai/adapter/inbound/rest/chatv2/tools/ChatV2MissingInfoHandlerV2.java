@@ -152,10 +152,22 @@ public class ChatV2MissingInfoHandlerV2 {
 
     private void validateStep2Data(Map<String, Object> data, List<String> missingFields, Map<String, Double> confidence) {
         // Verifica campi obbligatori per step 2 considerando NONE/UNKNOWN come null
-        boolean hasIncidentType = !isNullish(data.get("whatHappenedCode"));
-        boolean hasIncidentContext = !isNullish(data.get("whatHappenedContext"));
-        boolean hasCircumstances = !isNullishCircumstances(data.get("circumstances"));
-        boolean hasDamageDetails = !isNullish(data.get("damageDetails"));
+        Object whatHappenedCode = data.get("whatHappenedCode");
+        Object whatHappenedContext = data.get("whatHappenedContext");
+        Object circumstances = data.get("circumstances");
+        Object damageDetails = data.get("damageDetails");
+        
+        boolean hasIncidentType = !isNullish(whatHappenedCode);
+        boolean hasIncidentContext = !isNullish(whatHappenedContext);
+        boolean hasCircumstances = !isNullishCircumstances(circumstances);
+        boolean hasDamageDetails = !isNullish(damageDetails);
+
+        // Log detailed validation info
+        System.out.println("DEBUG: Step2 validation details:");
+        System.out.println("  - whatHappenedCode: " + whatHappenedCode + " (nullish: " + !hasIncidentType + ")");
+        System.out.println("  - whatHappenedContext: " + whatHappenedContext + " (nullish: " + !hasIncidentContext + ")");
+        System.out.println("  - circumstances: " + circumstances + " (nullish: " + !hasCircumstances + ")");
+        System.out.println("  - damageDetails: " + damageDetails + " (nullish: " + !hasDamageDetails + ")");
 
         if (!hasIncidentType) {
             missingFields.add("tipo di incidente");
@@ -179,6 +191,7 @@ public class ChatV2MissingInfoHandlerV2 {
                 ", hasIncidentContext: " + hasIncidentContext +
                 ", hasCircumstances: " + hasCircumstances +
                 ", hasDamageDetails: " + hasDamageDetails);
+        System.out.println("DEBUG: Missing fields: " + missingFields);
 
     }
 
@@ -188,19 +201,47 @@ public class ChatV2MissingInfoHandlerV2 {
             String s = v.toString().trim();
             if (s.isEmpty()) return true;
             String up = s.toUpperCase(java.util.Locale.ROOT);
-            return "NULL".equals(up) || "NONE".equals(up) || "UNKNOWN".equals(up);
+            
+            // Check for basic null values
+            if ("NULL".equals(up) || "NONE".equals(up) || "UNKNOWN".equals(up)) {
+                return true;
+            }
+            
+            // Check for patterns like "NONE - NONE (conf. 1,00)" or "UNKNOWN - UNKNOWN (conf. 0.95)"
+            // This regex matches: WORD - WORD (conf. NUMBER) where WORD is NONE, UNKNOWN, or similar
+            if (up.matches("^(NONE|UNKNOWN|NULL)\\s*-\\s*(NONE|UNKNOWN|NULL)\\s*\\(conf\\.\\s*[0-9.,]+\\s*\\)$")) {
+                System.out.println("DEBUG: Detected nullish pattern with confidence: " + s);
+                return true;
+            }
+            
+            // Check for patterns like "NONE - NONE" (without confidence)
+            if (up.matches("^(NONE|UNKNOWN|NULL)\\s*-\\s*(NONE|UNKNOWN|NULL)$")) {
+                System.out.println("DEBUG: Detected nullish pattern without confidence: " + s);
+                return true;
+            }
+            
+            // Check for patterns like "NONE (conf. 1,00)" - single value with confidence
+            if (up.matches("^(NONE|UNKNOWN|NULL)\\s*\\(conf\\.\\s*[0-9.,]+\\s*\\)$")) {
+                System.out.println("DEBUG: Detected single nullish value with confidence: " + s);
+                return true;
+            }
         }
         return false;
     }
 
-    @SuppressWarnings("rawtypes")
     private boolean isNullishCircumstances(Object v) {
         if (isNullish(v)) return true;
         if (v instanceof Map map) {
             Object details = map.get("details");
             Object notes = map.get("notes");
             // Considera assenti se entrambi vuoti/none/unknown
-            return isNullish(details) && isNullish(notes);
+            boolean detailsNullish = isNullish(details);
+            boolean notesNullish = isNullish(notes);
+            
+            System.out.println("DEBUG: isNullishCircumstances - details: " + details + " (nullish: " + detailsNullish + ")");
+            System.out.println("DEBUG: isNullishCircumstances - notes: " + notes + " (nullish: " + notesNullish + ")");
+            
+            return detailsNullish && notesNullish;
         }
         return false;
     }
@@ -231,6 +272,7 @@ public class ChatV2MissingInfoHandlerV2 {
         return Math.min(confidence, 1.0);
     }
 
+    @SuppressWarnings("unused")
     private double calculateDetailsConfidence(Map<String, Object> data) {
         double confidence = 0.0;
         
@@ -247,6 +289,7 @@ public class ChatV2MissingInfoHandlerV2 {
         return Math.min(confidence, 1.0);
     }
 
+    @SuppressWarnings("unused")
     private double calculateCircumstancesConfidence(Map<String, Object> data) {
         double confidence = 0.0;
         
@@ -310,15 +353,22 @@ public class ChatV2MissingInfoHandlerV2 {
 
             prompt.append("INFORMAZIONI GIÀ RACCOLTE:\n");
             boolean hasAnyInfo = false;
-            if (extractedData.containsKey("incidentDate") && extractedData.get("incidentDate") != null) {
+            
+            // Debug logging for prompt generation
+            System.out.println("DEBUG: Creating prompt - checking extractedData:");
+            System.out.println("  - incidentDate: " + extractedData.get("incidentDate") + " (nullish: " + isNullish(extractedData.get("incidentDate")) + ")");
+            System.out.println("  - incidentLocation: " + extractedData.get("incidentLocation") + " (nullish: " + isNullish(extractedData.get("incidentLocation")) + ")");
+            System.out.println("  - whatHappenedCode: " + extractedData.get("whatHappenedCode") + " (nullish: " + isNullish(extractedData.get("whatHappenedCode")) + ")");
+            
+            if (extractedData.containsKey("incidentDate") && !isNullish(extractedData.get("incidentDate"))) {
                 prompt.append("✓ Data/ora incidente: ").append(extractedData.get("incidentDate")).append("\n");
                 hasAnyInfo = true;
             }
-            if (extractedData.containsKey("incidentLocation") && extractedData.get("incidentLocation") != null) {
+            if (extractedData.containsKey("incidentLocation") && !isNullish(extractedData.get("incidentLocation"))) {
                 prompt.append("✓ Luogo incidente: ").append(extractedData.get("incidentLocation")).append("\n");
                 hasAnyInfo = true;
             }
-            if (extractedData.containsKey("whatHappenedCode") && extractedData.get("whatHappenedCode") != null) {
+            if (extractedData.containsKey("whatHappenedCode") && !isNullish(extractedData.get("whatHappenedCode"))) {
                 prompt.append("✓ Tipo di incidente: ").append(extractedData.get("whatHappenedCode")).append("\n");
                 hasAnyInfo = true;
             }
@@ -354,15 +404,15 @@ public class ChatV2MissingInfoHandlerV2 {
 
             prompt.append("BEREITS GESAMMELTE INFORMATIONEN:\n");
             boolean hasAnyInfo = false;
-            if (extractedData.containsKey("incidentDate") && extractedData.get("incidentDate") != null) {
+            if (extractedData.containsKey("incidentDate") && !isNullish(extractedData.get("incidentDate"))) {
                 prompt.append("✓ Schadensdatum/-zeit: ").append(extractedData.get("incidentDate")).append("\n");
                 hasAnyInfo = true;
             }
-            if (extractedData.containsKey("incidentLocation") && extractedData.get("incidentLocation") != null) {
+            if (extractedData.containsKey("incidentLocation") && !isNullish(extractedData.get("incidentLocation"))) {
                 prompt.append("✓ Schadensort: ").append(extractedData.get("incidentLocation")).append("\n");
                 hasAnyInfo = true;
             }
-            if (extractedData.containsKey("whatHappenedCode") && extractedData.get("whatHappenedCode") != null) {
+            if (extractedData.containsKey("whatHappenedCode") && !isNullish(extractedData.get("whatHappenedCode"))) {
                 prompt.append("✓ Schadenstyp: ").append(extractedData.get("whatHappenedCode")).append("\n");
                 hasAnyInfo = true;
             }
@@ -398,15 +448,15 @@ public class ChatV2MissingInfoHandlerV2 {
 
             prompt.append("ALREADY COLLECTED INFORMATION:\n");
             boolean hasAnyInfo = false;
-            if (extractedData.containsKey("incidentDate") && extractedData.get("incidentDate") != null) {
+            if (extractedData.containsKey("incidentDate") && !isNullish(extractedData.get("incidentDate"))) {
                 prompt.append("✓ Incident date/time: ").append(extractedData.get("incidentDate")).append("\n");
                 hasAnyInfo = true;
             }
-            if (extractedData.containsKey("incidentLocation") && extractedData.get("incidentLocation") != null) {
+            if (extractedData.containsKey("incidentLocation") && !isNullish(extractedData.get("incidentLocation"))) {
                 prompt.append("✓ Incident location: ").append(extractedData.get("incidentLocation")).append("\n");
                 hasAnyInfo = true;
             }
-            if (extractedData.containsKey("whatHappenedCode") && extractedData.get("whatHappenedCode") != null) {
+            if (extractedData.containsKey("whatHappenedCode") && !isNullish(extractedData.get("whatHappenedCode"))) {
                 prompt.append("✓ Incident type: ").append(extractedData.get("whatHappenedCode")).append("\n");
                 hasAnyInfo = true;
             }
@@ -559,6 +609,7 @@ public class ChatV2MissingInfoHandlerV2 {
         return "Please provide the missing information: " + String.join(", ", missingFields) + ".";
     }
 
+    @SuppressWarnings("unused")
     private String buildSystemPrompt(String currentStep, List<String> missingFields, String lang) {
         String basePrompt = """
             Sei un assistente esperto per la raccolta di informazioni sui sinistri assicurativi.
@@ -593,6 +644,7 @@ public class ChatV2MissingInfoHandlerV2 {
                         .replace("{{missingFields}}", String.join(", ", missingFields));
     }
 
+    @SuppressWarnings("unused")
     private String generateFallbackRequest(List<String> missingFields) {
         if (missingFields.isEmpty()) {
             return "Tutte le informazioni necessarie sono state fornite.";

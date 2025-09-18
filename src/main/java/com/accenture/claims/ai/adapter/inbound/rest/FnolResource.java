@@ -20,7 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-@jakarta.ws.rs.Path("/api/fnol")
+@jakarta.ws.rs.Path("/v1/api/fnol")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
 @Produces(MediaType.APPLICATION_JSON)
 public class FnolResource {
