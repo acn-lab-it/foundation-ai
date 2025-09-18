@@ -17,4 +17,7 @@ public interface PolicyRepository {
     Optional<InsuredProperty> findInsuredPropertyByPolicyNumber(String policyNumber);
 
     Optional<PolicyHolder> findPolicyHolderByPolicyNumber(String policyNumber);
+
+    void put(Policy policy);
+
 }

@@ -7,13 +7,21 @@ import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
 import com.accenture.claims.ai.application.tool.WelcomeTool;
+import com.accenture.claims.ai.domain.model.*;
+import com.accenture.claims.ai.domain.model.emailParsing.Contacts;
+import com.accenture.claims.ai.domain.model.emailParsing.Reporter;
+import com.accenture.claims.ai.domain.repository.PolicyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 import java.io.IOException;
@@ -61,6 +69,8 @@ public class ChatV2Resource {
     ChatV2CoverageVerifierV2 chatV2CoverageVerifier;
     @Inject
     ChatV2MediaHandlerV2 chatV2MediaHandler;
+    @Inject
+    PolicyRepository policyRepository;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -110,6 +120,295 @@ public class ChatV2Resource {
         public StepItem(String label, boolean completed) {
             this.label = label;
             this.completed = completed;
+        }
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class UploadPolicyResponse {
+        private Reporter reporter;
+        private String policyNumber;
+        private String createdAt;
+        private String uploadedAt;
+    }
+
+    @Data
+    public static class UploadPolicyPolicyholder {
+        private UploadPolicyPersonalData personalData;
+        private boolean marketingAgreement;
+        private boolean isPolicyholderPayer;
+    }
+
+    @Data
+    public static class UploadPolicyPersonalData {
+        private String type;
+        private UploadPolicyNaturalPerson naturalPerson;
+        private UploadPolicyCompany company;
+        private UploadPolicyContact contact;
+        private UploadPolicyAddress address;
+    }
+
+    @Data
+    public static class UploadPolicyNaturalPerson {
+        private String firstName;
+        private String lastName;
+        private String idType;
+        private String idNumber;
+        private String birthdate;
+        private String gender;
+    }
+
+    @Data
+    public static class UploadPolicyCompany {
+        // Campi vuoti, puoi aggiungere se servono
+    }
+
+    @Data
+    public static class UploadPolicyContact {
+        private String phone;
+        private String email;
+    }
+
+    @Data
+    public static class UploadPolicyAddress {
+        private String streetName;
+        private String streetNumber;
+        private String zipCode;
+        private String city;
+        private String countryCode;
+    }
+
+    @Data
+    public static class UploadPolicyHouseholdRelatedAttributes {
+        private String role;
+        private UploadPolicyQuoteConfiguration quoteConfiguration;
+        private UploadPolicyProperty property;
+    }
+
+    @Data
+    public static class UploadPolicyQuoteConfiguration {
+        private UploadPolicySelection selection;
+    }
+
+    @Data
+    public static class UploadPolicySelection {
+        // Nessun campo definito
+    }
+
+    @Data
+    public static class UploadPolicyProperty {
+        private UploadPolicyPropertyAddress propertyAddress;
+        private boolean shortTermRental;
+    }
+
+    @Data
+    public static class UploadPolicyPropertyAddress {
+        private String streetName;
+        private String streetNumber;
+        private String zipCode;
+        private String city;
+    }
+
+    @Data
+    public static class UploadPolicyTransaction {
+        private UploadPolicyDetails policyDetails;
+        private String policyStatus;
+    }
+
+    @Data
+    public static class UploadPolicyDetails {
+        private UploadPolicyHouseholdRelatedAttributes householdRelatedAttributes;
+        private List<UploadPolicyPolicyholder> policyholders;
+    }
+
+    @Data
+    public static class UploadPolicyRequest {
+        @NotBlank
+        String policyId;
+        @NotBlank
+        String creationTimestamp;
+        @NotBlank
+        String updateTimestamp;
+        @NotBlank
+        String productLineId;
+        @NotNull
+        UploadPolicyTransaction transaction;
+
+    }
+
+
+    @POST
+    @jakarta.ws.rs.Path("/upload-document")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @jakarta.enterprise.context.control.ActivateRequestContext
+    public Response uploadPolicy(
+            UploadPolicyRequest request,
+            @HeaderParam("Accept-Language") String acceptLanguage) throws Exception {
+
+        String policyId = request.getPolicyId();
+        String creationTimestamp = request.getCreationTimestamp();
+        String updateTimestamp = request.getUpdateTimestamp();
+        String productLineId = request.getProductLineId();
+        UploadPolicyTransaction transaction = request.getTransaction();
+        Reporter reporter = new Reporter();
+        reporter.setFirstName(transaction.policyDetails.policyholders.get(0).personalData.naturalPerson.firstName);
+        reporter.setLastName(transaction.policyDetails.policyholders.get(0).personalData.naturalPerson.lastName);
+        Contacts contacts = new Contacts();
+        contacts.setMobile(transaction.policyDetails.policyholders.get(0).personalData.contact.phone);
+        contacts.setEmail(transaction.policyDetails.policyholders.get(0).personalData.contact.email);
+        reporter.setContacts(contacts);
+        UploadPolicyResponse response = new UploadPolicyResponse(reporter, policyId, creationTimestamp, updateTimestamp);
+        Policy policy = new Policy();
+        // Status dalla transaction
+        policy.setPolicyStatus(transaction.getPolicyStatus());
+        // Fallback: usa policyId come policyNumber se non lo ricevi separatamente
+        policy.setPolicyNumber(policyId);
+
+        // ProductReference: se vuoi popolarlo, puoi mappare productLineId/prodotto/vers.
+        // In assenza dei campi completi nel metodo, lo lasciamo null o compila con placeholder
+        ProductReference pr = new ProductReference();
+        pr.setVersion("0.3.0");
+        pr.setName("Allianz BMP Generated Product");
+        pr.setGroupNameApl("italia 1"); //TODO
+        pr.setGroupName(productLineId.equals("MOTOR") ? "MOTOR" : "MULTIRISK");
+        policy.setProductReference(pr);
+
+        // InsuredProperty: mappa l’indirizzo dell’immobile (se presente nel payload)
+        UploadPolicyPropertyAddress pa =
+                Optional.ofNullable(transaction.getPolicyDetails())
+                        .map(UploadPolicyDetails::getHouseholdRelatedAttributes)
+                        .map(UploadPolicyHouseholdRelatedAttributes::getProperty)
+                        .map(UploadPolicyProperty::getPropertyAddress)
+                        .orElse(null);
+
+        if (pa != null) {
+            InsuredProperty insured = new InsuredProperty();
+            Address addr = new Address();
+            addr.setFullAddress(buildFullAddress(
+                    pa.getStreetName(),
+                    pa.getStreetNumber(),
+                    pa.getZipCode(),
+                    pa.getCity(),
+                    null
+            ));
+            addr.setCity(pa.getCity());
+            addr.setPostalCode(pa.getZipCode());
+
+            addr.setCity(pa.getCity());
+            // Se hai countryCode per la property lo puoi aggiungere; nel JSON dell’immobile non c’è
+            insured.setAddress(addr);
+            policy.setInsuredProperty(insured);
+        }
+
+        // PolicyHolders: mappa il primo (o tutti)
+        List<PolicyHolder> holders = new ArrayList<>();
+        if (transaction.getPolicyDetails() != null
+                && transaction.getPolicyDetails().getPolicyholders() != null) {
+            for (UploadPolicyPolicyholder uph : transaction.getPolicyDetails().getPolicyholders()) {
+                PolicyHolder h = new PolicyHolder();
+                if (uph.getPersonalData() != null) {
+                    UploadPolicyPersonalData pd = uph.getPersonalData();
+                    if (pd.getNaturalPerson() != null) {
+                        UploadPolicyNaturalPerson np = pd.getNaturalPerson();
+                        h.setFirstName(np.getFirstName());
+                        h.setLastName(np.getLastName());
+                        // birthdate: "yyyy-MM-dd"
+                        h.setDateOfBirth(parseDateOrNull(np.getBirthdate()));
+                        h.setGender(np.getGender());
+                    }
+                    if (pd.getAddress() != null) {
+                        UploadPolicyAddress a = pd.getAddress();
+                        Address ha = new Address();
+                        ha.setFullAddress(buildFullAddress(
+                                a.getStreetName(),
+                                a.getStreetNumber(),
+                                a.getZipCode(),
+                                a.getCity(),
+                                a.getCountryCode()
+                        ));
+                        ha.setCity(a.getCity());
+                        ha.setPostalCode(a.getZipCode());
+                        ha.setCountryCode(a.getCountryCode());
+                        h.setAddress(ha);
+                    }
+
+                    if (pd.getContact() != null) {
+                        UploadPolicyContact c = pd.getContact();
+                        List<ContactChannel> channels = new ArrayList<>();
+                        if (c.getEmail() != null && !c.getEmail().isBlank()) {
+                            ContactChannel email = new ContactChannel();
+                            email.setCommunicationType("EMAIL");
+                            email.setCommunicationDetails(c.getEmail());
+                            channels.add(email);
+                        }
+                        if (c.getPhone() != null && !c.getPhone().isBlank()) {
+                            ContactChannel phone = new ContactChannel();
+                            phone.setCommunicationType("MOBILE");
+                            phone.setCommunicationDetails(c.getPhone());
+                            channels.add(phone);
+                        }
+                        h.setContactChannels(channels);
+                    }
+                }
+                h.setPolicyHolderPayer(uph.isPolicyholderPayer());
+                // Se ti serve mappare marketingAgreement/roles/customerId, fallo qui
+                holders.add(h);
+            }
+        }
+        policy.setPolicyHolders(holders);
+
+        policyRepository.put(policy);
+
+        return Response.ok(response).build();
+    }
+
+    private static String buildFullAddress(String streetName, String streetNumber, String zip, String city, String countryCode) {
+        StringBuilder sb = new StringBuilder();
+        if (streetName != null && !streetName.isBlank()) {
+            sb.append(streetName.trim());
+        }
+        if (streetNumber != null && !streetNumber.isBlank()) {
+            if (!sb.isEmpty()) sb.append(" ");
+            sb.append(streetNumber.trim());
+        }
+        if (zip != null && !zip.isBlank()) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(zip.trim());
+        }
+        if (city != null && !city.isBlank()) {
+            if (!sb.isEmpty()) sb.append(" ");
+            sb.append(city.trim());
+        }
+        if (countryCode != null && !countryCode.isBlank()) {
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(countryCode.trim());
+        }
+        return sb.toString();
+    }
+
+
+    // Helpers locali per parsing date
+    private static java.util.Date parseDateOrNull(String yyyyMMdd) {
+        if (yyyyMMdd == null || yyyyMMdd.isBlank()) return null;
+        try {
+            java.time.LocalDate d = java.time.LocalDate.parse(yyyyMMdd);
+            return java.util.Date.from(d.atStartOfDay(java.time.ZoneId.of("UTC")).toInstant());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static java.util.Date parseDateTimeOrNull(String iso) {
+        if (iso == null || iso.isBlank()) return null;
+        try {
+            return java.util.Date.from(java.time.Instant.parse(iso));
+        } catch (Exception e) {
+            // fallback OffsetDateTime (es: ±hh:mm)
+            try {
+                return java.util.Date.from(java.time.OffsetDateTime.parse(iso).toInstant());
+            } catch (Exception ignored) {
+                return null;
+            }
         }
     }
 
