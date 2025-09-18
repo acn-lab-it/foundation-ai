@@ -226,6 +226,8 @@ public class ChatV2Resource {
         @NotBlank
         String policyId;
         @NotBlank
+        String policyNumber;
+        @NotBlank
         String creationTimestamp;
         @NotBlank
         String updateTimestamp;
@@ -262,7 +264,7 @@ public class ChatV2Resource {
         // Status dalla transaction
         policy.setPolicyStatus(transaction.getPolicyStatus());
         // Fallback: usa policyId come policyNumber se non lo ricevi separatamente
-        policy.setPolicyNumber(policyId);
+        policy.setPolicyNumber(request.getPolicyNumber());
 
         // ProductReference: se vuoi popolarlo, puoi mappare productLineId/prodotto/vers.
         // In assenza dei campi completi nel metodo, lo lasciamo null o compila con placeholder
