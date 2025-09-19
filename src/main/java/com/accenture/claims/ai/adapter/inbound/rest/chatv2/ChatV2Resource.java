@@ -6,6 +6,7 @@ import com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools.*;
 import com.accenture.claims.ai.adapter.inbound.rest.dto.ChatForm;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.SessionLanguageContext;
+import com.accenture.claims.ai.adapter.outbound.rest.SpeechToTextService;
 import com.accenture.claims.ai.application.tool.WelcomeTool;
 import com.accenture.claims.ai.domain.model.*;
 import com.accenture.claims.ai.domain.model.emailParsing.Contacts;
@@ -28,7 +29,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.Optional;
 
 @jakarta.ws.rs.Path("/api/fnol/chat")
 @Consumes(MediaType.MULTIPART_FORM_DATA)
@@ -72,6 +72,8 @@ public class ChatV2Resource {
     ChatV2MediaHandlerV2 chatV2MediaHandler;
     @Inject
     PolicyRepository policyRepository;
+    @Inject
+    SpeechToTextService speechToTextService;
 
     private static final ObjectMapper M = new ObjectMapper();
 
@@ -129,6 +131,7 @@ public class ChatV2Resource {
     public static class UploadPolicyResponse {
         private Reporter reporter;
         private String policyNumber;
+        private String policyId;
         private String createdAt;
         private String uploadedAt;
     }
@@ -331,13 +334,13 @@ public class ChatV2Resource {
             }
             reporter.setContacts(contacts);
         }
-        
-        UploadPolicyResponse response = new UploadPolicyResponse(reporter, request.getPolicyNumber(), creationTimestamp, updateTimestamp);
+
+        UploadPolicyResponse response = new UploadPolicyResponse(reporter, request.getPolicyNumber(), policyId, creationTimestamp, updateTimestamp);
         Policy policy = new Policy();
-        
-        // Generate _id
-        policy.set_id(generateId());
-        
+
+        policy.set_id(policyId);
+        policy.setPolicyId(policyId);
+
         // Status dalla transaction - prioritize transaction status, ensure it's ACTIVE
         String finalPolicyStatus = transaction.getPolicyStatus() != null ? 
             transaction.getPolicyStatus() : "ACTIVE";
@@ -938,6 +941,20 @@ public class ChatV2Resource {
         String sessionId = form.sessionId;
         String userMessage = form.userMessage;
 
+        // Gestione messaggio vocale
+        if (form.userAudioMessage != null) {
+            try {
+                Path tmpDir = Files.createTempDirectory("chatv2-audio-");
+                Path dst = tmpDir.resolve(form.userAudioMessage.fileName());
+                Files.copy(form.userAudioMessage.uploadedFile(), dst);
+                userMessage = speechToTextService.convertAudioToText(dst.toString(), acceptLanguage);
+            } catch (IOException e) {
+                return Response.serverError()
+                        .entity("{\"error\":\"audio_upload_failure\"}")
+                        .build();
+            }
+        }
+
         // Gestione eventuali file
         if (form.files != null && !form.files.isEmpty()) {
             try {
@@ -954,21 +971,6 @@ public class ChatV2Resource {
             } catch (IOException e) {
                 return Response.serverError()
                         .entity("{\"error\":\"upload_failure\"}")
-                        .build();
-            }
-        }
-
-        // Gestione messaggio vocale
-        if (form.userAudioMessage != null) {
-            try {
-                Path tmpDir = Files.createTempDirectory("chatv2-audio-");
-                Path dst = tmpDir.resolve(form.userAudioMessage.fileName());
-                Files.copy(form.userAudioMessage.uploadedFile(), dst);
-
-                userMessage += "[AUDIO_MESSAGE]\n" + dst + "\n[/AUDIO_MESSAGE]";
-            } catch (IOException e) {
-                return Response.serverError()
-                        .entity("{\"error\":\"audio_upload_failure\"}")
                         .build();
             }
         }

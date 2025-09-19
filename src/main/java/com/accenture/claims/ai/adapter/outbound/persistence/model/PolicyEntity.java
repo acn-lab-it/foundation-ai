@@ -19,6 +19,7 @@ public class PolicyEntity extends PanacheMongoEntity {
     private Date beginDate;
     private Date endDate;
     private String policyNumber;
+    private String policyId;
     private List<PolicyHolderEntity> policyHolders;
     private String _class;
     

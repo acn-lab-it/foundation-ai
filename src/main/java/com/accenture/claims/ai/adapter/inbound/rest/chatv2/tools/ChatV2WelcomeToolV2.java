@@ -1,12 +1,12 @@
 package com.accenture.claims.ai.adapter.inbound.rest.chatv2.tools;
 
 import com.accenture.claims.ai.adapter.inbound.rest.chatStorage.FinalOutputJSONStore;
+import com.accenture.claims.ai.adapter.inbound.rest.chatv2.ChatV2Resource;
 import com.accenture.claims.ai.adapter.inbound.rest.helpers.LanguageHelper;
 import com.accenture.claims.ai.adapter.outbound.persistence.repository.PolicyRepositoryAdapter;
 import com.accenture.claims.ai.domain.model.ContactChannel;
 import com.accenture.claims.ai.domain.model.Policy;
 import com.accenture.claims.ai.domain.model.PolicyHolder;
-import com.accenture.claims.ai.adapter.inbound.rest.chatv2.ChatV2Resource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -105,6 +105,7 @@ public class ChatV2WelcomeToolV2 {
         patch.set("reporter", reporterNode);
 
         patch.set("policyNumber", mapper.convertValue(policy.getPolicyNumber(), JsonNode.class));
+        patch.set("policyId", mapper.convertValue(policy.getPolicyId(), JsonNode.class));
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
         LocalDateTime dateTime = LocalDateTime.now();
