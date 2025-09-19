@@ -15,6 +15,7 @@ public class Policy {
     private Date beginDate;
     private Date endDate;
     private String policyNumber;
+    private String policyId;
     private List<PolicyHolder> policyHolders;
     private String _class;
 
